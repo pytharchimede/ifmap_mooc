@@ -38,7 +38,7 @@
         <div class="training-grid">
             <?php foreach ($trainings as $course): ?>
                 <article class="training-card">
-                    <a href="/formations/sous-gerant-station-service" class="training-image <?= htmlspecialchars($course['tone']) ?>">
+                    <a href="/formations/<?= urlencode($course['slug']) ?>" class="training-image <?= htmlspecialchars($course['tone']) ?>">
                         <span class="mode-badge"><?= htmlspecialchars($course['mode']) ?></span>
                         <?php if (!empty($course['thumbnail'])): ?>
                             <img class="training-thumbnail" src="<?= htmlspecialchars($course['thumbnail']) ?>" alt="">
@@ -49,11 +49,11 @@
                     </a>
                     <div>
                         <small><?= htmlspecialchars($course['sector']) ?></small>
-                        <h2><a href="/formations/sous-gerant-station-service"><?= htmlspecialchars($course['title']) ?></a></h2>
+                        <h2><a href="/formations/<?= urlencode($course['slug']) ?>"><?= htmlspecialchars($course['title']) ?></a></h2>
                         <p>◷ <?= htmlspecialchars($course['duration']) ?> <span>·</span> Certificat inclus</p>
                         <footer>
                             <strong><?= number_format($course['price'], 0, ',', ' ') ?> FCFA</strong>
-                            <a href="/formations/sous-gerant-station-service">Découvrir →</a>
+                            <a href="/formations/<?= urlencode($course['slug']) ?>">Découvrir →</a>
                         </footer>
                     </div>
                 </article>

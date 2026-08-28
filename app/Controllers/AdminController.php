@@ -64,8 +64,8 @@ final class AdminController
 
     public function index(): void { $this->guard(); $courses=Database::connection()->query("SELECT c.id,c.title,c.category,COALESCE(ROUND(AVG(e.progress)),0) progress,COUNT(e.user_id) enrolled,c.tone color FROM courses c LEFT JOIN enrollments e ON e.course_id=c.id GROUP BY c.id ORDER BY enrolled DESC LIMIT 5")->fetchAll(); View::render('admin/dashboard', ['title'=>'Vue d’ensemble','active'=>'admin-dashboard','courses'=>$courses], 'admin'); }
     public function courses(): void { $this->guard(); $courses=Database::connection()->query("SELECT id,title,category sector,mode,duration_label duration,price,tone,status FROM courses ORDER BY id DESC")->fetchAll(); View::render('admin/courses', ['title'=>'Gestion des cours','active'=>'admin-courses','courses'=>$courses], 'admin'); }
-    public function courseForm(): void { $this->guard(); $availableCourses=Database::connection()->query("SELECT id,title FROM courses WHERE status IN ('published','draft') ORDER BY title")->fetchAll(); View::render('admin/course-form',['title'=>'Nouvelle formation','active'=>'admin-courses','availableCourses'=>$availableCourses],'admin'); }
-    public function editCourse(): void { $this->guard();$id=(int)($_GET['id']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$availableCourses=$db->query("SELECT id,title FROM courses WHERE id<>$id ORDER BY title")->fetchAll();$skills=$db->query("SELECT skill_name FROM course_prerequisites WHERE course_id=$id AND type='skill' ORDER BY id")->fetchAll(\PDO::FETCH_COLUMN);$requiredCourses=$db->query("SELECT prerequisite_course_id FROM course_prerequisites WHERE course_id=$id AND type='course'")->fetchAll(\PDO::FETCH_COLUMN);View::render('admin/course-edit',['title'=>'Modifier la formation','active'=>'admin-courses','course'=>$course,'availableCourses'=>$availableCourses,'skills'=>$skills,'requiredCourses'=>$requiredCourses],'admin'); }
+    public function courseForm(): void { $this->guard(); $db=Database::connection(); $availableCourses=$db->query("SELECT id,title FROM courses WHERE status IN ('published','draft') ORDER BY title")->fetchAll(); $instructors=$db->query("SELECT id,name FROM users WHERE role='instructor' AND status='active' ORDER BY name")->fetchAll(); View::render('admin/course-form',['title'=>'Nouvelle formation','active'=>'admin-courses','availableCourses'=>$availableCourses,'instructors'=>$instructors],'admin'); }
+    public function editCourse(): void { $this->guard();$id=(int)($_GET['id']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$availableCourses=$db->query("SELECT id,title FROM courses WHERE id<>$id ORDER BY title")->fetchAll();$instructors=$db->query("SELECT id,name FROM users WHERE role='instructor' AND status='active' ORDER BY name")->fetchAll();$skills=$db->query("SELECT skill_name FROM course_prerequisites WHERE course_id=$id AND type='skill' ORDER BY id")->fetchAll(\PDO::FETCH_COLUMN);$requiredCourses=$db->query("SELECT prerequisite_course_id FROM course_prerequisites WHERE course_id=$id AND type='course'")->fetchAll(\PDO::FETCH_COLUMN);View::render('admin/course-edit',['title'=>'Modifier la formation','active'=>'admin-courses','course'=>$course,'availableCourses'=>$availableCourses,'instructors'=>$instructors,'skills'=>$skills,'requiredCourses'=>$requiredCourses],'admin'); }
     public function updateCourse(): void
     {
         $this->guard();
@@ -83,7 +83,7 @@ final class AdminController
         $db->beginTransaction();
 
         try {
-            $stmt = $db->prepare('UPDATE courses SET title=?,category=?,mode=?,duration_label=?,price=?,status=?,description=?,thumbnail=? WHERE id=?');
+            $stmt = $db->prepare('UPDATE courses SET title=?,category=?,mode=?,duration_label=?,price=?,status=?,description=?,thumbnail=?,instructor_id=? WHERE id=?');
             $stmt->execute([
                 $title,
                 trim($_POST['sector'] ?? 'Autre'),
@@ -93,6 +93,7 @@ final class AdminController
                 in_array($_POST['status'] ?? '', ['draft', 'published', 'archived'], true) ? $_POST['status'] : 'draft',
                 trim($_POST['description'] ?? ''),
                 $thumbnail,
+                !empty($_POST['instructor_id']) ? (int) $_POST['instructor_id'] : null,
                 $id,
             ]);
 
@@ -149,7 +150,7 @@ final class AdminController
         $db->beginTransaction();
 
         try {
-            $stmt = $db->prepare('INSERT INTO courses(title,slug,category,mode,duration_label,price,tone,status,description,thumbnail) VALUES(?,?,?,?,?,?,?,?,?,?)');
+            $stmt = $db->prepare('INSERT INTO courses(title,slug,category,mode,duration_label,price,tone,status,description,thumbnail,instructor_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
             $stmt->execute([
                 $title,
                 strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $title), '-')),
@@ -161,6 +162,7 @@ final class AdminController
                 $_POST['status'] ?? 'draft',
                 trim($_POST['description'] ?? ''),
                 $thumbnail,
+                !empty($_POST['instructor_id']) ? (int) $_POST['instructor_id'] : null,
             ]);
 
             $courseId = (int) $db->lastInsertId();

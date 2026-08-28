@@ -47,7 +47,37 @@ final class SiteController
 
     public function home(): void { View::render('site/home', ['title'=>'Accueil','active'=>'home'], 'site'); }
     public function trainings(): void { View::render('site/trainings', ['title'=>'Nos formations','active'=>'trainings','trainings'=>$this->trainingData()], 'site'); }
-    public function training(): void { $db=Database::connection();$course=$db->query('SELECT * FROM courses ORDER BY id LIMIT 1')->fetch();$prerequisites=$course?$db->query("SELECT cp.*,required.title required_title FROM course_prerequisites cp LEFT JOIN courses required ON required.id=cp.prerequisite_course_id WHERE cp.course_id=".(int)$course['id'])->fetchAll():[];View::render('site/training', ['title'=>$course['title']??'Formation IFMAP','active'=>'trainings','courseData'=>$course,'prerequisites'=>$prerequisites], 'site'); }
+    public function training(): void
+    {
+        $slug = trim((string) ($_GET['slug'] ?? 'sous-gerant-station-service'));
+        $db = Database::connection();
+        $stmt = $db->prepare("SELECT c.*, u.name instructor_name, u.email instructor_email, u.phone instructor_phone, u.avatar instructor_avatar, u.specialty instructor_specialty, u.bio instructor_bio, u.cv_path instructor_cv FROM courses c LEFT JOIN users u ON u.id=c.instructor_id WHERE c.slug=? AND c.status='published' LIMIT 1");
+        $stmt->execute([$slug]);
+        $course = $stmt->fetch();
+
+        if (!$course) {
+            http_response_code(404);
+            View::render('errors/404', ['title' => 'Formation introuvable']);
+            return;
+        }
+
+        $prerequisites = $db->query("SELECT cp.*,required.title required_title FROM course_prerequisites cp LEFT JOIN courses required ON required.id=cp.prerequisite_course_id WHERE cp.course_id=" . (int) $course['id'])->fetchAll();
+        $modules = $db->query('SELECT * FROM modules WHERE course_id=' . (int) $course['id'] . ' ORDER BY position,id')->fetchAll();
+        foreach ($modules as &$module) {
+            $lessonStmt = $db->prepare('SELECT title,type,duration,content FROM lessons WHERE module_id=? ORDER BY position,id');
+            $lessonStmt->execute([(int) $module['id']]);
+            $module['lessons'] = $lessonStmt->fetchAll();
+        }
+        unset($module);
+
+        View::render('site/training', [
+            'title' => $course['title'],
+            'active' => 'trainings',
+            'courseData' => $course,
+            'prerequisites' => $prerequisites,
+            'modules' => $modules,
+        ], 'site');
+    }
     public function shop(): void { View::render('site/shop', ['title'=>'Boutique équipements','active'=>'shop','products'=>$this->products()], 'site'); }
     public function product(): void { View::render('site/product', ['title'=>'Sabre de jauge','active'=>'shop'], 'site'); }
     public function cart(): void { View::render('site/cart', ['title'=>'Votre panier','active'=>'cart'], 'site'); }
@@ -84,9 +114,19 @@ final class SiteController
     public function addCart(): void
     {
         $type = ($_POST['type'] ?? '') === 'product' ? 'product' : 'training';
-        $_SESSION['cart'][$type] = ($type === 'product')
-            ? ['name'=>'Sabre de jauge','quantity'=>max(1, (int)($_POST['quantity'] ?? 1)),'price'=>45000]
-            : ['name'=>'Le Métier de Sous-Gérant en Station-Service','quantity'=>1,'price'=>75000];
+        if ($type === 'product') {
+            $_SESSION['cart'][$type] = ['name' => 'Sabre de jauge', 'quantity' => max(1, (int) ($_POST['quantity'] ?? 1)), 'price' => 45000];
+        } else {
+            $courseId = (int) ($_POST['course_id'] ?? 0);
+            $stmt = Database::connection()->prepare("SELECT title,price FROM courses WHERE id=? AND status='published' LIMIT 1");
+            $stmt->execute([$courseId]);
+            $course = $stmt->fetch();
+            if (!$course) {
+                $_SESSION['flash'] = 'Cette formation n’est plus disponible.';
+                $this->redirect('/formations');
+            }
+            $_SESSION['cart'][$type] = ['name' => $course['title'], 'quantity' => 1, 'price' => (int) $course['price']];
+        }
         $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
         header('Location: ' . $base . '/panier'); exit;
     }

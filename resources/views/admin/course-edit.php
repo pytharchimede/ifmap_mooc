@@ -28,6 +28,14 @@
                     <img class="thumbnail-preview" src="<?= htmlspecialchars($course['thumbnail']) ?>" alt="Vignette actuelle de la formation">
                 <?php endif ?>
             </label>
+            <label class="full">Formateur
+                <select name="instructor_id">
+                    <option value="">Aucun formateur affecté</option>
+                    <?php foreach ($instructors as $instructor): ?>
+                        <option value="<?= (int) $instructor['id'] ?>" <?= (int) ($course['instructor_id'] ?? 0) === (int) $instructor['id'] ? 'selected' : '' ?>><?= htmlspecialchars($instructor['name']) ?></option>
+                    <?php endforeach ?>
+                </select>
+            </label>
             <label>Filière
                 <input name="sector" value="<?= htmlspecialchars($course['category']) ?>">
             </label>

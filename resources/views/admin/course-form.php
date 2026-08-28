@@ -20,6 +20,14 @@
                 <input type="file" name="thumbnail" accept="image/jpeg,image/png,image/webp">
                 <small>JPG, PNG ou WebP · 5 Mo maximum</small>
             </label>
+            <label class="full">Formateur
+                <select name="instructor_id">
+                    <option value="">Aucun formateur affecté</option>
+                    <?php foreach ($instructors as $instructor): ?>
+                        <option value="<?= (int) $instructor['id'] ?>"><?= htmlspecialchars($instructor['name']) ?></option>
+                    <?php endforeach ?>
+                </select>
+            </label>
             <label>Filière *
                 <select name="sector">
                     <option>Aval pétrolier</option>

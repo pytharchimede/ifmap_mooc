@@ -403,3 +403,25 @@ document.querySelectorAll("form.builder-form").forEach((form) => {
   type.addEventListener("change", toggle);
   toggle();
 });
+
+const detailTabs = document.querySelectorAll("[data-detail-tab]");
+if (detailTabs.length) {
+  const detailPanels = document.querySelectorAll(".course-tab-panel");
+  const activateDetailTab = (tabName) => {
+    detailTabs.forEach((tab) => {
+      const isActive = tab.dataset.detailTab === tabName;
+      tab.classList.toggle("active", isActive);
+      tab.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    detailPanels.forEach((panel) => {
+      panel.hidden = panel.id !== tabName;
+    });
+  };
+
+  detailTabs.forEach((tab) => {
+    tab.addEventListener("click", () =>
+      activateDetailTab(tab.dataset.detailTab),
+    );
+  });
+  activateDetailTab("programme");
+}

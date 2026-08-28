@@ -14,7 +14,7 @@
 <a class="<?= $active==='courses'?'active':'' ?>" href="/cours"><i data-icon="book"></i>Mes formations <b>3</b></a>
 <a class="<?= $active==='catalog'?'active':'' ?>" href="/catalogue"><i data-icon="compass"></i>Catalogue</a>
 <a href="#"><i data-icon="award"></i>Mes certificats</a>
-<p>MON COMPTE</p><a href="#"><i data-icon="user"></i>Mon profil</a><a href="#"><i data-icon="settings"></i>Préférences</a>
+<p>MON COMPTE</p><a href="/profil"><i data-icon="user"></i>Mon profil</a><a href="#"><i data-icon="settings"></i>Préférences</a>
 </nav><div class="sidebar-help"><span>?</span><div><strong>Besoin d’aide ?</strong><small>Notre équipe vous répond</small></div></div>
 <a class="admin-link" href="/admin"><i data-icon="shield"></i>Administration</a></aside>
 <main class="main"><header class="topbar"><button class="icon-btn mobile-menu" data-menu>☰</button><label class="search"><i data-icon="search"></i><input placeholder="Rechercher une formation..."><kbd>⌘ K</kbd></label><div class="top-actions"><button class="icon-btn dot"><i data-icon="bell"></i></button><div class="profile"><span class="avatar">AK</span><div><strong>Assa Kouamé</strong><small>Apprenante</small></div><span>⌄</span></div></div></header>
