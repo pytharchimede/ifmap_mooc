@@ -19,6 +19,7 @@ spl_autoload_register(function (string $class): void {
 });
 
 Env::load(__DIR__ . '/.env');
+App\Core\Bootstrap::run(__DIR__);
 
 $router = new Router();
 require __DIR__ . '/routes/web.php';
@@ -45,6 +46,7 @@ if (!empty($_SESSION['user']['name'])) {
 }
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/functional.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/builder-media.css"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/rich-editor.css"></head>', $html);
 $html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(

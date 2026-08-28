@@ -39,3 +39,21 @@ document.querySelectorAll('form.builder-form').forEach(form=>{
 document.querySelectorAll('[data-password]').forEach(button=>button.addEventListener('click',()=>{const input=button.previousElementSibling;input.type=input.type==='password'?'text':'password';button.textContent=input.type==='password'?'Afficher':'Masquer'}));
 document.querySelector('[data-avatar-input]')?.addEventListener('change',event=>{const file=event.target.files[0];if(!file)return;const preview=document.querySelector('#avatar-preview');preview.src=URL.createObjectURL(file);preview.hidden=false;document.querySelector('#avatar-initials')?.remove()});
 document.querySelectorAll('.main-nav a').forEach(link=>{if(link.textContent.trim()==='Mon profil'){const base=location.pathname.split('/academie')[0].split('/cours')[0].split('/catalogue')[0];link.href=`${base}/profil`;}});
+
+const cloneRepeat=(listSelector)=>{const list=document.querySelector(listSelector);if(!list)return;const field=list.querySelector('.repeat-field').cloneNode(true);field.querySelectorAll('input').forEach(input=>input.value='');field.querySelectorAll('select').forEach(select=>select.value='');list.appendChild(field)};
+document.querySelector('[data-add-skill]')?.addEventListener('click',()=>cloneRepeat('[data-skill-list]'));
+document.querySelector('[data-add-course]')?.addEventListener('click',()=>cloneRepeat('[data-course-list]'));
+document.addEventListener('click',event=>{if(!event.target.matches('[data-remove-field]'))return;const field=event.target.closest('.repeat-field'),list=field.parentElement;if(list.querySelectorAll('.repeat-field').length>1)field.remove();else field.querySelectorAll('input,select').forEach(input=>input.value='')});
+
+document.querySelectorAll('form.builder-form').forEach(form=>{
+  const action=form.querySelector('[name=builder_action]')?.value;
+  if(action!=='lesson')return;
+  const textarea=form.querySelector('[name=content]'),type=form.querySelector('[name=type]');if(!textarea||!type)return;
+  const editor=document.createElement('div');editor.className='rich-editor full';editor.innerHTML='<div class="rich-toolbar"><select data-format><option value="p">Paragraphe</option><option value="h2">Titre 1</option><option value="h3">Titre 2</option><option value="blockquote">Citation</option></select><button type="button" data-cmd="bold"><b>G</b></button><button type="button" data-cmd="italic"><i>I</i></button><button type="button" data-cmd="underline"><u>S</u></button><button type="button" data-cmd="insertUnorderedList">• Liste</button><button type="button" data-cmd="insertOrderedList">1. Liste</button><button type="button" data-link>🔗 Lien</button><button type="button" data-cmd="removeFormat">Effacer</button></div><div class="rich-canvas" contenteditable="true" data-placeholder="Rédigez la leçon ici..."></div><small>Mise en forme enregistrée automatiquement et sécurisée côté serveur.</small>';
+  textarea.insertAdjacentElement('afterend',editor);const canvas=editor.querySelector('.rich-canvas');
+  editor.querySelectorAll('[data-cmd]').forEach(button=>button.addEventListener('click',()=>{document.execCommand(button.dataset.cmd,false);canvas.focus()}));
+  editor.querySelector('[data-format]').addEventListener('change',event=>{document.execCommand('formatBlock',false,event.target.value);canvas.focus()});
+  editor.querySelector('[data-link]').addEventListener('click',()=>{const url=prompt('Adresse du lien (https://...)');if(url)document.execCommand('createLink',false,url)});
+  const sync=()=>textarea.value=canvas.innerHTML;canvas.addEventListener('input',sync);form.addEventListener('submit',sync);
+  const toggle=()=>{const textMode=type.value==='text';editor.hidden=!textMode;textarea.hidden=textMode;if(textMode&&textarea.value&&!canvas.innerHTML)canvas.innerHTML=textarea.value;};type.addEventListener('change',toggle);toggle();
+});

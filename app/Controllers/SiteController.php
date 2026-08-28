@@ -31,7 +31,7 @@ final class SiteController
 
     public function home(): void { View::render('site/home', ['title'=>'Accueil','active'=>'home'], 'site'); }
     public function trainings(): void { View::render('site/trainings', ['title'=>'Nos formations','active'=>'trainings','trainings'=>$this->trainingData()], 'site'); }
-    public function training(): void { View::render('site/training', ['title'=>'Le Métier de Sous-Gérant','active'=>'trainings'], 'site'); }
+    public function training(): void { $db=Database::connection();$course=$db->query('SELECT * FROM courses ORDER BY id LIMIT 1')->fetch();$prerequisites=$course?$db->query("SELECT cp.*,required.title required_title FROM course_prerequisites cp LEFT JOIN courses required ON required.id=cp.prerequisite_course_id WHERE cp.course_id=".(int)$course['id'])->fetchAll():[];View::render('site/training', ['title'=>$course['title']??'Formation IFMAP','active'=>'trainings','courseData'=>$course,'prerequisites'=>$prerequisites], 'site'); }
     public function shop(): void { View::render('site/shop', ['title'=>'Boutique équipements','active'=>'shop','products'=>$this->products()], 'site'); }
     public function product(): void { View::render('site/product', ['title'=>'Sabre de jauge','active'=>'shop'], 'site'); }
     public function cart(): void { View::render('site/cart', ['title'=>'Votre panier','active'=>'cart'], 'site'); }
