@@ -47,6 +47,8 @@ $router->post('/admin/deconnexion', [AdminController::class, 'logout']);
 $router->get('/admin/cours', [AdminController::class, 'courses']);
 $router->get('/admin/cours/nouveau', [AdminController::class, 'courseForm']);
 $router->post('/admin/cours/nouveau', [AdminController::class, 'saveCourse']);
+$router->get('/admin/cours/modifier', [AdminController::class, 'editCourse']);
+$router->post('/admin/cours/modifier', [AdminController::class, 'updateCourse']);
 $router->get('/admin/cours/programme', [AdminController::class, 'builder']);
 $router->post('/admin/cours/programme', [AdminController::class, 'builderAction']);
 $router->post('/admin/cours/supprimer', [AdminController::class, 'deleteCourse']);

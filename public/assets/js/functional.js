@@ -11,7 +11,7 @@ document.querySelectorAll('.program-line').forEach(line=>line.addEventListener('
 
 document.querySelector('.lesson-nav .primary')?.addEventListener('click',event=>{event.currentTarget.textContent='✓ Leçon terminée';event.currentTarget.disabled=true;const progress=document.querySelector('.learn-progress .progress span');if(progress)progress.style.width='76%'});
 
-document.querySelectorAll('form[action$="/admin/cours/supprimer"]').forEach(form=>{const id=form.querySelector('[name=id]')?.value;if(!id)return;const link=document.createElement('a');link.className='btn secondary';link.textContent='Programme';const base=location.pathname.split('/admin/')[0];link.href=`${base}/admin/cours/programme?course=${id}`;form.parentElement.prepend(link)});
+document.querySelectorAll('form[action$="/admin/cours/supprimer"]').forEach(form=>{const id=form.querySelector('[name=id]')?.value;if(!id)return;const base=location.pathname.split('/admin/')[0];const program=document.createElement('a');program.className='btn secondary';program.textContent='Programme';program.href=`${base}/admin/cours/programme?course=${id}`;const edit=document.createElement('a');edit.className='btn secondary';edit.textContent='Modifier';edit.href=`${base}/admin/cours/modifier?id=${id}`;form.parentElement.prepend(program);form.parentElement.prepend(edit)});
 
 document.querySelectorAll('form.builder-form').forEach(form=>{
   const action=form.querySelector('[name=builder_action]')?.value;
