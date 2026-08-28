@@ -2,7 +2,6 @@
 namespace App\Controllers;
 
 use App\Core\View;
-use App\Support\DemoData;
 use App\Core\Database;
 
 final class DashboardController
@@ -34,10 +33,19 @@ final class DashboardController
             $stmt->execute([(int) $user['id']]);
             $instructorCourses = $stmt->fetchAll();
         }
-        View::render('dashboard', ['title'=>'Tableau de bord','active'=>'dashboard','courses'=>$this->courses(),'user'=>$user,'instructorCourses'=>$instructorCourses,'flash'=>$_SESSION['profile_flash']??null,'error'=>$_SESSION['profile_error']??null]);
+        $stmt=$db->prepare('SELECT COUNT(*) FROM certificates WHERE user_id=?');$stmt->execute([(int)$user['id']]);$certificateCount=(int)$stmt->fetchColumn();
+        View::render('dashboard', ['title'=>'Tableau de bord','active'=>'dashboard','courses'=>$this->courses(),'user'=>$user,'instructorCourses'=>$instructorCourses,'certificateCount'=>$certificateCount,'flash'=>$_SESSION['profile_flash']??null,'error'=>$_SESSION['profile_error']??null]);
         unset($_SESSION['profile_flash'], $_SESSION['profile_error']);
     }
     public function catalog(): void { $this->guard(); View::render('catalog', ['title'=>'Catalogue des cours','active'=>'catalog','courses'=>$this->courses()]); }
     public function enroll(): void { $this->guard();$courseId=(int)($_POST['course_id']??0);$stmt=Database::connection()->prepare("INSERT IGNORE INTO enrollments(user_id,course_id,status,source) SELECT ?,id,'active','catalog' FROM courses WHERE id=? AND status='published'");$stmt->execute([(int)$_SESSION['user']['id'],$courseId]);$_SESSION['flash']='Inscription au cours confirmée.';$base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/');header('Location: '.$base.'/academie/formation?course='.$courseId);exit; }
-    public function course(): void { $this->guard(); View::render('course', ['title'=>'Pilotage de la performance publique','active'=>'courses','modules'=>DemoData::modules()], 'course'); }
+    public function course(): void
+    {
+        $this->guard();
+        if(($_SESSION['user']['role']??'')==='admin'){$base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/');header('Location: '.$base.'/admin');exit;}
+        $db=Database::connection();$userId=(int)$_SESSION['user']['id'];
+        $stmt=$db->prepare("SELECT c.id,c.title,c.category,c.duration_label,c.thumbnail,c.tone,e.progress,e.status,e.enrolled_at,e.completed_at,u.name teacher,COUNT(DISTINCT m.id) modules,COUNT(DISTINCT l.id) lessons,COUNT(DISTINCT lp.lesson_id) completed_lessons,(SELECT id FROM certificates ce WHERE ce.user_id=e.user_id AND ce.course_id=c.id ORDER BY ce.id DESC LIMIT 1) certificate_id FROM enrollments e JOIN courses c ON c.id=e.course_id LEFT JOIN users u ON u.id=c.instructor_id LEFT JOIN modules m ON m.course_id=c.id LEFT JOIN lessons l ON l.module_id=m.id LEFT JOIN lesson_progress lp ON lp.lesson_id=l.id AND lp.user_id=e.user_id WHERE e.user_id=? AND e.status IN ('active','completed') GROUP BY c.id,e.user_id,e.progress,e.status,e.enrolled_at,e.completed_at,u.name ORDER BY e.enrolled_at DESC");
+        $stmt->execute([$userId]);$courses=$stmt->fetchAll();$_SESSION['my_course_count']=count($courses);
+        View::render('course',['title'=>'Mes formations','active'=>'courses','courses'=>$courses]);
+    }
 }

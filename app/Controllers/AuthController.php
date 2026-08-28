@@ -16,17 +16,19 @@ final class AuthController
     public function showRegister(): void
     {
         if (!empty($_SESSION['user'])) $this->redirect($this->intended('/academie'));
-        View::render('auth/register',['title'=>'Créer mon compte','error'=>$_SESSION['auth_error']??null,'courseId'=>(int)($_GET['course']??0)],'customer-auth'); unset($_SESSION['auth_error']);
+        View::render('auth/register',['title'=>'Créer mon compte','error'=>$_SESSION['auth_error']??null,'courseId'=>(int)($_GET['course']??0),'old'=>$_SESSION['auth_old']??[]],'customer-auth'); unset($_SESSION['auth_error'],$_SESSION['auth_old']);
     }
     public function register(): void
     {
-        $name=trim($_POST['name']??''); $email=strtolower(trim($_POST['email']??'')); $phone=$this->normalizePhone($_POST['phone']??''); $password=(string)($_POST['password']??''); $role=($_POST['role']??'')==='instructor'?'instructor':'learner';$courseId=(int)($_POST['course_id']??0);
-        if($name===''||!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($phone)<8||strlen($password)<6){$_SESSION['auth_error']='Renseignez un nom, un email valide, un téléphone et un mot de passe de 6 caractères minimum.';$this->redirect('/inscription'.($courseId?'?course='.$courseId:''));}
+        $name=trim($_POST['name']??''); $email=strtolower(trim($_POST['email']??'')); $phone=$this->normalizePhone($_POST['phone']??''); $password=(string)($_POST['password']??'');$confirmation=(string)($_POST['password_confirmation']??''); $role=($_POST['role']??'')==='instructor'?'instructor':'learner';$courseId=(int)($_POST['course_id']??0);$_SESSION['auth_old']=['name'=>$name,'email'=>$email,'phone'=>$phone,'role'=>$role];
+        if($name===''||!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($phone)<8){$_SESSION['auth_error']='Renseignez un nom, un email valide et un numéro de téléphone valide.';$this->redirect('/inscription'.($courseId?'?course='.$courseId:''));}
+        if(strlen($password)<8||$password!==$confirmation){$_SESSION['auth_error']='Choisissez un mot de passe d’au moins 8 caractères et confirmez-le à l’identique.';$this->redirect('/inscription'.($courseId?'?course='.$courseId:''));}
+        if(empty($_POST['terms'])){$_SESSION['auth_error']='Vous devez accepter les conditions d’utilisation.';$this->redirect('/inscription'.($courseId?'?course='.$courseId:''));}
         if($this->findByIdentifier($email)||$this->findByIdentifier($phone)){$_SESSION['auth_error']='Un compte existe déjà avec cet email ou ce numéro.';$this->redirect('/inscription'.($courseId?'?course='.$courseId:''));}
         $hash=password_hash($password,PASSWORD_DEFAULT);
         $otp=(string)random_int(100000,999999);
         try{$db=Database::connection();$db->beginTransaction();$stmt=$db->prepare("INSERT INTO users (name,email,password,phone,role,status,otp_code,otp_expires_at) VALUES (?,?,?,?,?,'disabled',?,DATE_ADD(NOW(),INTERVAL 15 MINUTE))");$stmt->execute([$name,$email,$hash,$phone,$role,$otp]);$userId=(int)$db->lastInsertId();if($courseId>0){$stmt=$db->prepare("INSERT IGNORE INTO enrollments(user_id,course_id,status,source) SELECT ?,id,'pending','direct_registration' FROM courses WHERE id=? AND status='published'");$stmt->execute([$userId,$courseId]);}$db->commit();}catch(\Throwable){if(isset($db)&&$db->inTransaction())$db->rollBack();$_SESSION['auth_error']='La création du compte a échoué. Vérifiez que le téléphone n’est pas déjà utilisé.';$this->redirect('/inscription'.($courseId?'?course='.$courseId:''));}
-        $this->dispatchOtp($email,$phone,$otp);$_SESSION['pending_activation']=$userId;$_SESSION['otp_demo']=$otp;$_SESSION['activation_flash']='Compte créé. Saisissez le code reçu ou demandez une activation à l’administrateur.';$this->redirect('/activation');
+        unset($_SESSION['auth_old']);$this->dispatchOtp($email,$phone,$otp);$_SESSION['pending_activation']=$userId;$_SESSION['otp_demo']=$otp;$_SESSION['activation_flash']=$courseId?'Compte et préinscription créés. Définissez l’accès en validant le code reçu.':'Compte créé. Saisissez le code reçu ou demandez une activation à l’administrateur.';$this->redirect('/activation');
     }
     public function login(): void
     {

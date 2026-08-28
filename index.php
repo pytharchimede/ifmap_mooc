@@ -46,8 +46,11 @@ if (!empty($_SESSION['user']['name'])) {
 }
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/functional.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/modern-forms.css"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/profile-manager.css"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/account-dropdown.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/builder-media.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/rich-editor.css"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/news.css"></head>', $html);
 $html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(

@@ -10,6 +10,46 @@ document.querySelectorAll("[data-table-search]").forEach((input) =>
   }),
 );
 
+document.querySelectorAll("[data-account-dropdown]").forEach((dropdown) => {
+  const trigger = dropdown.querySelector("[data-account-toggle]");
+  const menu = dropdown.querySelector("[data-account-menu]");
+  const close = () => { dropdown.classList.remove("open"); menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); };
+  trigger.addEventListener("click", (event) => { event.stopPropagation(); const opening = menu.hidden; document.querySelectorAll("[data-account-dropdown].open").forEach((item) => { if (item !== dropdown) item.querySelector("[data-account-toggle]").click(); }); menu.hidden = !opening; dropdown.classList.toggle("open", opening); trigger.setAttribute("aria-expanded", String(opening)); });
+  dropdown.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", close);
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+});
+
+const certificateTools = document.querySelector(".document-tools");
+if (certificateTools && location.pathname.endsWith("/academie/diplome")) {
+  const id = new URLSearchParams(location.search).get("id");
+  if (id) {
+    const link = document.createElement("a");
+    link.href = `${location.pathname.replace("/diplome", "/attestation")}?id=${id}`;
+    link.textContent = "Attestation de fin de formation";
+    certificateTools.append(link);
+  }
+}
+document.querySelectorAll(".my-course-card").forEach((card) => {
+  const courseLink = card.querySelector('a[href*="/academie/formation?course="]');
+  const actions = card.querySelector("footer > div");
+  if (!courseLink || !actions) return;
+  const id = new URL(courseLink.href).searchParams.get("course");
+  const transcript = document.createElement("a");
+  transcript.className = "btn secondary";
+  transcript.href = `${location.pathname.split("/cours")[0]}/academie/livret?course=${id}`;
+  transcript.textContent = "Livret scolaire";
+  actions.prepend(transcript);
+});
+const ordersExport = document.querySelector('a[href$="/admin/documents/export-commandes"]');
+if (ordersExport && location.pathname.endsWith("/admin/documents")) {
+  const enrollmentsExport = document.createElement("a");
+  enrollmentsExport.className = "btn secondary";
+  enrollmentsExport.href = ordersExport.href.replace("export-commandes", "export-inscriptions");
+  enrollmentsExport.textContent = "Inscriptions Excel/CSV";
+  ordersExport.after(enrollmentsExport);
+}
+
 const trainingCatalog = document.querySelector("[data-training-catalog]");
 if (trainingCatalog) {
   const normalize = (value) => value.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -196,16 +236,31 @@ document.querySelectorAll("[data-password]").forEach((button) =>
     button.textContent = input.type === "password" ? "Afficher" : "Masquer";
   }),
 );
-document
-  .querySelector("[data-avatar-input]")
-  ?.addEventListener("change", (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+const updateProfileFile = (input, file, type) => {
+  if (!file) return;
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  input.files = transfer.files;
+  const label = document.querySelector(`[data-file-name="${type}"]`);
+  if (label) label.textContent = file.name;
+  if (type === "avatar") {
     const preview = document.querySelector("#avatar-preview");
     preview.src = URL.createObjectURL(file);
     preview.hidden = false;
     document.querySelector("#avatar-initials")?.remove();
-  });
+  }
+};
+document.querySelectorAll("[data-dropzone]").forEach((zone) => {
+  const type = zone.dataset.dropzone;
+  const input = zone.querySelector(type === "avatar" ? "[data-avatar-input]" : "[data-cv-input]");
+  if (!input) return;
+  zone.addEventListener("click", () => input.click());
+  zone.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); input.click(); } });
+  ["dragenter", "dragover"].forEach((name) => zone.addEventListener(name, (event) => { event.preventDefault(); zone.classList.add("is-dragging"); }));
+  ["dragleave", "drop"].forEach((name) => zone.addEventListener(name, (event) => { event.preventDefault(); zone.classList.remove("is-dragging"); }));
+  zone.addEventListener("drop", (event) => updateProfileFile(input, event.dataTransfer.files[0], type));
+  input.addEventListener("change", () => updateProfileFile(input, input.files[0], type));
+});
 document.querySelectorAll(".main-nav a").forEach((link) => {
   if (link.textContent.trim() === "Mon profil") {
     const base = location.pathname
@@ -215,18 +270,6 @@ document.querySelectorAll(".main-nav a").forEach((link) => {
     link.href = `${base}/profil`;
   }
 });
-
-const adminUsersLink = [...document.querySelectorAll(".admin-sidebar .main-nav a")].find(
-  (link) => link.textContent.trim() === "Utilisateurs",
-);
-if (adminUsersLink && !document.querySelector('a[href$="/admin/inscriptions"]')) {
-  const base = location.pathname.split("/admin")[0];
-  const enrollments = document.createElement("a");
-  enrollments.href = `${base}/admin/inscriptions`;
-  enrollments.innerHTML = '<i data-icon="book"></i>Inscriptions aux cours';
-  if (location.pathname.endsWith("/admin/inscriptions")) enrollments.className = "active";
-  adminUsersLink.after(enrollments);
-}
 
 const cloneRepeat = (listSelector) => {
   const list = document.querySelector(listSelector);
@@ -475,3 +518,58 @@ if (detailTabs.length) {
   });
   activateDetailTab("programme");
 }
+
+document.querySelectorAll("[data-copy-url]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(button.dataset.copyUrl);
+      const label = button.textContent;
+      button.textContent = "Lien copié ✓";
+      setTimeout(() => (button.textContent = label), 1800);
+    } catch (_) {
+      window.prompt("Copiez ce lien", button.dataset.copyUrl);
+    }
+  });
+});
+
+document.querySelectorAll("[data-news-content]").forEach((textarea) => {
+  const editor = document.createElement("div");
+  editor.className = "rich-editor full";
+  editor.innerHTML = '<div class="rich-toolbar"><select data-format><option value="p">Paragraphe</option><option value="h2">Grand titre</option><option value="h3">Sous-titre</option><option value="blockquote">Citation</option></select><button type="button" data-cmd="bold"><b>G</b></button><button type="button" data-cmd="italic"><i>I</i></button><button type="button" data-cmd="underline"><u>S</u></button><button type="button" data-cmd="insertUnorderedList">• Liste</button><button type="button" data-cmd="insertOrderedList">1. Liste</button><button type="button" data-link>🔗 Lien</button><button type="button" data-cmd="removeFormat">Effacer</button></div><div class="rich-canvas" contenteditable="true" data-placeholder="Rédigez un article complet, structurez les titres et ajoutez des liens..."></div><small>Le contenu est nettoyé et sécurisé lors de la publication.</small>';
+  textarea.hidden = true;
+  textarea.insertAdjacentElement("afterend", editor);
+  const canvas = editor.querySelector(".rich-canvas");
+  canvas.innerHTML = textarea.value;
+  editor.querySelectorAll("[data-cmd]").forEach((button) =>
+    button.addEventListener("click", () => {
+      document.execCommand(button.dataset.cmd, false);
+      canvas.focus();
+    }),
+  );
+  editor.querySelector("[data-format]").addEventListener("change", (event) => {
+    document.execCommand("formatBlock", false, event.target.value);
+    canvas.focus();
+  });
+  editor.querySelector("[data-link]").addEventListener("click", () => {
+    const url = prompt("Adresse du lien (https://...)");
+    if (url) document.execCommand("createLink", false, url);
+  });
+  const sync = () => (textarea.value = canvas.innerHTML);
+  canvas.addEventListener("input", sync);
+  textarea.form?.addEventListener("submit", sync);
+});
+
+document.querySelectorAll("[data-news-form]").forEach((form) => {
+  const file = form.querySelector("[data-news-cover]");
+  const url = form.querySelector('[name="cover_url"]');
+  const preview = form.querySelector("[data-news-image-preview]");
+  const show = (source) => {
+    if (!source || !preview) return;
+    preview.style.backgroundImage = `url("${source.replace(/"/g, "")}")`;
+    preview.hidden = false;
+  };
+  file?.addEventListener("change", () => {
+    if (file.files[0]) show(URL.createObjectURL(file.files[0]));
+  });
+  url?.addEventListener("input", () => show(url.value));
+});

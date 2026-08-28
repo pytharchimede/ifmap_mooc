@@ -36,8 +36,36 @@ final class AcademyController
     }
     public function certificate(): void
     {
-        $user=$this->user();$id=(int)($_GET['id']??0);$stmt=Database::connection()->prepare('SELECT ce.*,c.title course_title,u.name user_name FROM certificates ce JOIN courses c ON c.id=ce.course_id JOIN users u ON u.id=ce.user_id WHERE ce.id=? AND (ce.user_id=? OR ?=\'admin\')');$stmt->execute([$id,$user['id'],$user['role']??'']);$certificate=$stmt->fetch();if(!$certificate){http_response_code(403);return;}View::render('academy/certificate',['title'=>'Diplôme IFMAP','certificate'=>$certificate],'certificate');
+        $user=$this->user();$id=(int)($_GET['id']??0);$db=Database::connection();$stmt=$db->prepare('SELECT ce.*,c.title course_title,c.duration_label,u.name user_name,u.email user_email,i.name instructor_name FROM certificates ce JOIN courses c ON c.id=ce.course_id JOIN users u ON u.id=ce.user_id LEFT JOIN users i ON i.id=c.instructor_id WHERE ce.id=? AND (ce.user_id=? OR ?=\'admin\')');$stmt->execute([$id,$user['id'],$user['role']??'']);$certificate=$stmt->fetch();if(!$certificate){http_response_code(403);return;}$brand=$this->brand($db);View::render('academy/certificate',['title'=>'Diplôme IFMAP','certificate'=>$certificate,'brand'=>$brand],'certificate');
+    }
+    public function specimen(): void
+    {
+        $user=$this->user();$courseId=(int)($_GET['course']??0);$db=Database::connection();
+        $stmt=$db->prepare("SELECT c.id course_id,c.title course_title,c.duration_label,u.name user_name,u.email user_email,i.name instructor_name,e.progress,e.enrolled_at FROM enrollments e JOIN courses c ON c.id=e.course_id JOIN users u ON u.id=e.user_id LEFT JOIN users i ON i.id=c.instructor_id WHERE e.course_id=? AND e.user_id=? AND e.status IN ('active','completed') LIMIT 1");
+        $stmt->execute([$courseId,(int)$user['id']]);$certificate=$stmt->fetch();
+        if(!$certificate){http_response_code(403);View::render('errors/404',['title'=>'Aperçu indisponible']);return;}
+        $certificate+=['id'=>0,'reference'=>'SPECIMEN','verification_code'=>'NON-VALIDE','final_score'=>null,'issued_at'=>date('Y-m-d H:i:s')];
+        View::render('academy/certificate',['title'=>'Spécimen du diplôme','certificate'=>$certificate,'brand'=>$this->brand($db),'specimen'=>true],'certificate');
+    }
+    public function certificates(): void
+    {
+        $user=$this->user();$db=Database::connection();$stmt=$db->prepare('SELECT ce.*,c.title course_title,c.duration_label FROM certificates ce JOIN courses c ON c.id=ce.course_id WHERE ce.user_id=? ORDER BY ce.issued_at DESC');$stmt->execute([(int)$user['id']]);$certificates=$stmt->fetchAll();
+        $stmt=$db->prepare("SELECT c.id course_id,c.title course_title,c.duration_label,e.progress FROM enrollments e JOIN courses c ON c.id=e.course_id LEFT JOIN certificates ce ON ce.course_id=e.course_id AND ce.user_id=e.user_id WHERE e.user_id=? AND e.status IN ('active','completed') AND ce.id IS NULL ORDER BY e.enrolled_at DESC");$stmt->execute([(int)$user['id']]);
+        View::render('academy/certificates',['title'=>'Mes certificats','active'=>'certificates','certificates'=>$certificates,'specimenCourses'=>$stmt->fetchAll()]);
+    }
+    public function attestation(): void
+    {
+        $user=$this->user();$id=(int)($_GET['id']??0);$db=Database::connection();$stmt=$db->prepare('SELECT ce.*,c.title course_title,c.duration_label,c.category,u.name user_name,i.name instructor_name FROM certificates ce JOIN courses c ON c.id=ce.course_id JOIN users u ON u.id=ce.user_id LEFT JOIN users i ON i.id=c.instructor_id WHERE ce.id=? AND (ce.user_id=? OR ?=\'admin\')');$stmt->execute([$id,$user['id'],$user['role']??'']);$document=$stmt->fetch();if(!$document){http_response_code(403);return;}View::render('academy/attestation',['title'=>'Attestation de fin de formation','document'=>$document,'brand'=>$this->brand($db)],'document');
+    }
+    public function transcript(): void
+    {
+        $user=$this->user();$courseId=(int)($_GET['course']??0);$db=Database::connection();$stmt=$db->prepare('SELECT e.*,c.title course_title,c.duration_label,c.category,u.name user_name FROM enrollments e JOIN courses c ON c.id=e.course_id JOIN users u ON u.id=e.user_id WHERE e.user_id=? AND e.course_id=?');$stmt->execute([$user['id'],$courseId]);$enrollment=$stmt->fetch();if(!$enrollment&&($user['role']??'')!=='admin'){http_response_code(403);return;}$stmt=$db->prepare('SELECT a.title,a.type,MAX(aa.score) score,MAX(aa.passed) passed,MAX(aa.completed_at) completed_at FROM assessments a LEFT JOIN assessment_attempts aa ON aa.assessment_id=a.id AND aa.user_id=? WHERE a.course_id=? GROUP BY a.id ORDER BY a.id');$stmt->execute([$user['id'],$courseId]);$results=$stmt->fetchAll();$stmt=$db->prepare('SELECT m.title module_title,COUNT(DISTINCT l.id) lessons,COUNT(DISTINCT lp.lesson_id) completed FROM modules m LEFT JOIN lessons l ON l.module_id=m.id LEFT JOIN lesson_progress lp ON lp.lesson_id=l.id AND lp.user_id=? WHERE m.course_id=? GROUP BY m.id ORDER BY m.position,m.id');$stmt->execute([$user['id'],$courseId]);View::render('academy/transcript',['title'=>'Livret scolaire','enrollment'=>$enrollment,'results'=>$results,'modules'=>$stmt->fetchAll(),'brand'=>$this->brand($db)],'document');
+    }
+    public function verifyCertificate(): void
+    {
+        $code=trim((string)($_GET['code']??''));$db=Database::connection();$stmt=$db->prepare('SELECT ce.reference,ce.verification_code,ce.final_score,ce.issued_at,c.title course_title,u.name user_name FROM certificates ce JOIN courses c ON c.id=ce.course_id JOIN users u ON u.id=ce.user_id WHERE ce.verification_code=? OR ce.reference=? LIMIT 1');$stmt->execute([$code,$code]);$certificate=$stmt->fetch()?:null;View::render('academy/verify',['title'=>'Vérifier un certificat','active'=>'','certificate'=>$certificate,'code'=>$code,'brand'=>$this->brand($db)],'site');
     }
     private function issueCertificate(int $courseId,int $userId,int $score): void { $db=Database::connection();$code='IFMAP-'.date('Y').'-'.strtoupper(bin2hex(random_bytes(4)));$stmt=$db->prepare('INSERT INTO certificates(user_id,course_id,reference,verification_code,final_score) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE final_score=GREATEST(COALESCE(final_score,0),VALUES(final_score))');$stmt->execute([$userId,$courseId,$code,$code,$score]);$db->prepare('UPDATE enrollments SET progress=100,completed_at=NOW() WHERE user_id=? AND course_id=?')->execute([$userId,$courseId]);}
+    private function brand(\PDO $db): array { $brand=['name'=>'IFMAP','primary'=>'#123f3a','accent'=>'#d89b2b','logo'=>null];try{foreach($db->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row)if(array_key_exists($row['key'],$brand))$brand[$row['key']]=$row['value'];}catch(\Throwable){}return $brand; }
     private function redirect(string $path): never {$base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/');header('Location: '.$base.$path);exit;}
 }

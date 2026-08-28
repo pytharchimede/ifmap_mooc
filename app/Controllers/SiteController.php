@@ -136,5 +136,26 @@ final class SiteController
         $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
         header('Location: ' . $base . '/panier'); exit;
     }
+    public function news(): void
+    {
+        $db=Database::connection();
+        $posts=$db->query("SELECT p.*,u.name author_name,(SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id=p.id AND pc.status='approved') comment_count FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.status='published' AND (p.published_at IS NULL OR p.published_at<=NOW()) ORDER BY COALESCE(p.published_at,p.created_at) DESC")->fetchAll();
+        View::render('site/news',['title'=>'Actualités','active'=>'news','posts'=>$posts],'site');
+    }
+    public function article(): void
+    {
+        $slug=trim((string)($_GET['slug']??''));$db=Database::connection();
+        $stmt=$db->prepare("SELECT p.*,u.name author_name FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.slug=? AND p.status='published' AND (p.published_at IS NULL OR p.published_at<=NOW()) LIMIT 1");$stmt->execute([$slug]);$post=$stmt->fetch();
+        if(!$post){http_response_code(404);View::render('errors/404',['title'=>'Article introuvable']);return;}
+        $stmt=$db->prepare("SELECT pc.*,u.avatar FROM post_comments pc LEFT JOIN users u ON u.id=pc.user_id WHERE pc.post_id=? AND pc.status='approved' ORDER BY pc.created_at ASC");$stmt->execute([(int)$post['id']]);
+        View::render('site/article',['title'=>$post['title'],'active'=>'news','post'=>$post,'comments'=>$stmt->fetchAll()],'site');
+    }
+    public function commentArticle(): void
+    {
+        $postId=(int)($_POST['post_id']??0);$name=mb_substr(trim((string)($_POST['name']??($_SESSION['user']['name']??''))),0,120);$email=mb_substr(trim((string)($_POST['email']??($_SESSION['user']['email']??''))),0,190);$content=mb_substr(trim((string)($_POST['content']??'')),0,3000);$db=Database::connection();
+        $stmt=$db->prepare("SELECT slug FROM posts WHERE id=? AND status='published'");$stmt->execute([$postId]);$slug=$stmt->fetchColumn();if(!$slug)$this->redirect('/actualites');
+        if($name===''||!filter_var($email,FILTER_VALIDATE_EMAIL)||mb_strlen($content)<3){$_SESSION['flash']='Renseignez un nom, un email valide et votre commentaire.';$this->redirect('/actualites/'.$slug.'#commentaires');}
+        $stmt=$db->prepare("INSERT INTO post_comments(post_id,user_id,name,email,content,status) VALUES(?,?,?,?,?,'approved')");$stmt->execute([$postId,$_SESSION['user']['id']??null,$name,$email,$content]);$_SESSION['flash']='Votre commentaire est publié.';$this->redirect('/actualites/'.$slug.'#commentaires');
+    }
     private function redirect(string $path): never { $base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/'); header('Location: '.$base.$path); exit; }
 }
