@@ -1,0 +1,10 @@
+<?php
+return function (PDO $db): void {
+    $db->exec("CREATE TABLE users (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120), email VARCHAR(190) UNIQUE, password VARCHAR(255), role ENUM('learner','instructor','admin') DEFAULT 'learner', avatar VARCHAR(255) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE courses (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, title VARCHAR(190), slug VARCHAR(190) UNIQUE, description TEXT, category VARCHAR(100), thumbnail VARCHAR(255) NULL, status ENUM('draft','published','archived') DEFAULT 'draft', instructor_id BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE modules (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, course_id BIGINT UNSIGNED, title VARCHAR(190), position INT DEFAULT 0, FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE lessons (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, module_id BIGINT UNSIGNED, title VARCHAR(190), type ENUM('video','text','quiz','file') DEFAULT 'video', content LONGTEXT NULL, duration INT DEFAULT 0, position INT DEFAULT 0, FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE enrollments (user_id BIGINT UNSIGNED, course_id BIGINT UNSIGNED, progress TINYINT UNSIGNED DEFAULT 0, enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP NULL, PRIMARY KEY(user_id, course_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE settings (`key` VARCHAR(120) PRIMARY KEY, `value` LONGTEXT NULL, `group` VARCHAR(80) DEFAULT 'general') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+};
+

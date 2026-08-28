@@ -11,7 +11,7 @@ php migrate.php
 php -S 127.0.0.1:8080
 ```
 
-Ouvrir `http://127.0.0.1:8080`. L'administration est disponible sur `/admin` et le paramétrage de marque sur `/admin/branding`.
+Ouvrir `http://127.0.0.1:8080`. Le site public couvre `/formations`, `/boutique`, `/panier` et `/mon-compte`. L'académie est disponible sur `/academie`, l'administration sur `/admin` et le paramétrage de marque sur `/admin/branding`.
 
 Avec Apache, le fichier `.htaccess` redirige automatiquement toutes les URLs vers le routeur. Le document root doit pointer vers ce dossier et `mod_rewrite` doit être activé.
 
@@ -24,6 +24,6 @@ Avec Apache, le fichier `.htaccess` redirige automatiquement toutes les URLs ver
 - `database/migrations` : évolutions automatiques du schéma
 - `public/assets` : CSS et JavaScript
 
-Le prototype utilise des données de démonstration pour être immédiatement navigable. Le schéma MySQL couvre utilisateurs, rôles, cours, modules, leçons, inscriptions, progression et réglages de marque.
+Le prototype utilise des données de démonstration pour être immédiatement navigable. Le schéma MySQL couvre utilisateurs, rôles, cours, modules, leçons, inscriptions, progression, produits, commandes mixtes, paiements, livraison, attestations et réglages de marque.
 
 # ifmap_mooc
