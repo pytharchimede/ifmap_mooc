@@ -38,8 +38,13 @@ if (!empty($_SESSION['user']['name'])) {
     $parts = preg_split('/\s+/', trim((string)$_SESSION['user']['name'])) ?: [];
     $initials = htmlspecialchars(strtoupper(substr($parts[0] ?? 'U', 0, 1) . substr($parts[count($parts)-1] ?? '', 0, 1)), ENT_QUOTES, 'UTF-8');
     $html = str_replace(['Assa Kouamé', 'Bonjour Assa', '>AK<'], [$viewerName, 'Bonjour ' . $firstName, '>' . $initials . '<'], $html);
+    if (!empty($_SESSION['user']['avatar'])) {
+        $avatarUrl = htmlspecialchars((string)$_SESSION['user']['avatar'], ENT_QUOTES, 'UTF-8');
+        $html = str_replace('>' . $initials . '</span>', '><img src="' . $avatarUrl . '" alt="Photo de profil" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span>', $html);
+    }
 }
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/functional.css"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/builder-media.css"></head>', $html);
 $html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(

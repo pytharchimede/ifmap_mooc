@@ -12,3 +12,30 @@ document.querySelectorAll('.program-line').forEach(line=>line.addEventListener('
 document.querySelector('.lesson-nav .primary')?.addEventListener('click',event=>{event.currentTarget.textContent='✓ Leçon terminée';event.currentTarget.disabled=true;const progress=document.querySelector('.learn-progress .progress span');if(progress)progress.style.width='76%'});
 
 document.querySelectorAll('form[action$="/admin/cours/supprimer"]').forEach(form=>{const id=form.querySelector('[name=id]')?.value;if(!id)return;const link=document.createElement('a');link.className='btn secondary';link.textContent='Programme';const base=location.pathname.split('/admin/')[0];link.href=`${base}/admin/cours/programme?course=${id}`;form.parentElement.prepend(link)});
+
+document.querySelectorAll('form.builder-form').forEach(form=>{
+  const action=form.querySelector('[name=builder_action]')?.value;
+  if(action==='lesson'){
+    form.enctype='multipart/form-data';
+    const type=form.querySelector('[name=type]');if(type){type.setAttribute('aria-label','Type de contenu');type.title='Choisissez Vidéo, Article ou Ressource';}
+    const duration=form.querySelector('[name=duration]');if(duration){duration.placeholder='Durée en minutes';duration.title='Durée estimée de la leçon en minutes';const label=document.createElement('label');label.textContent='Durée (minutes)';label.style.cssText='display:flex;flex-direction:column;gap:5px;font-size:9px;font-weight:700';duration.parentNode.insertBefore(label,duration);label.appendChild(duration);}
+    const content=form.querySelector('[name=content]');if(content)content.placeholder='Texte de la leçon, URL vidéo ou URL du document';
+    if(content){
+      const upload=document.createElement('div');upload.className='lesson-upload full';upload.innerHTML='<label class="upload-label">Ou sélectionner un fichier<input type="file" name="attachment" accept="video/mp4,video/webm,application/pdf,.docx,.pptx,.zip"></label><small>MP4, WebM, PDF, DOCX, PPTX ou ZIP · 150 Mo maximum</small><div class="lesson-live-preview"><em>L’aperçu apparaîtra ici.</em></div>';
+      content.insertAdjacentElement('afterend',upload);
+      const file=upload.querySelector('input[type=file]'),preview=upload.querySelector('.lesson-live-preview');
+      const renderUrl=url=>{const kind=type?.value;if(kind==='video')preview.innerHTML=`<video src="${url}" controls></video>`;else if(kind==='file'&&url.toLowerCase().includes('.pdf'))preview.innerHTML=`<iframe src="${url}"></iframe>`;else preview.innerHTML=url?`<div class="resource-preview">${url}</div>`:'<em>L’aperçu apparaîtra ici.</em>';};
+      file.addEventListener('change',()=>{if(file.files[0])renderUrl(URL.createObjectURL(file.files[0]))});
+      content.addEventListener('input',()=>renderUrl(content.value.trim()));
+      type?.addEventListener('change',()=>{if(file.files[0])renderUrl(URL.createObjectURL(file.files[0]));else renderUrl(content.value.trim())});
+    }
+  }
+  if(action==='assessment'){
+    const score=form.querySelector('[name=passing_score]');if(score)score.title='Pourcentage minimum nécessaire pour réussir';
+    const attempts=form.querySelector('[name=attempts_allowed]');if(attempts)attempts.title='Nombre maximum de compositions autorisées';
+  }
+});
+
+document.querySelectorAll('[data-password]').forEach(button=>button.addEventListener('click',()=>{const input=button.previousElementSibling;input.type=input.type==='password'?'text':'password';button.textContent=input.type==='password'?'Afficher':'Masquer'}));
+document.querySelector('[data-avatar-input]')?.addEventListener('change',event=>{const file=event.target.files[0];if(!file)return;const preview=document.querySelector('#avatar-preview');preview.src=URL.createObjectURL(file);preview.hidden=false;document.querySelector('#avatar-initials')?.remove()});
+document.querySelectorAll('.main-nav a').forEach(link=>{if(link.textContent.trim()==='Mon profil'){const base=location.pathname.split('/academie')[0].split('/cours')[0].split('/catalogue')[0];link.href=`${base}/profil`;}});

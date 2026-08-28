@@ -39,7 +39,7 @@ final class AuthController
     public function logout(): void { unset($_SESSION['user']);session_regenerate_id(true);$_SESSION['auth_flash']='Vous êtes maintenant déconnecté.';$this->redirect('/connexion'); }
     private function findByEmail(string $email): ?array
     {
-        try{$stmt=Database::connection()->prepare('SELECT id,name,email,password,role FROM users WHERE email=? LIMIT 1');$stmt->execute([$email]);return $stmt->fetch()?:null;}catch(\Throwable){return null;}
+        try{$stmt=Database::connection()->prepare('SELECT id,name,email,phone,avatar,password,role FROM users WHERE email=? LIMIT 1');$stmt->execute([$email]);return $stmt->fetch()?:null;}catch(\Throwable){return null;}
     }
     private function intended(string $fallback): string { $path=$_SESSION['intended_url']??$fallback;unset($_SESSION['intended_url']);return str_starts_with($path,'/')?$path:$fallback; }
     private function safe(array $user): array { unset($user['password']);return $user; }
