@@ -68,7 +68,45 @@ final class AdminController
     public function editCourse(): void { $this->guard();$id=(int)($_GET['id']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$availableCourses=$db->query("SELECT id,title FROM courses WHERE id<>$id ORDER BY title")->fetchAll();$skills=$db->query("SELECT skill_name FROM course_prerequisites WHERE course_id=$id AND type='skill' ORDER BY id")->fetchAll(\PDO::FETCH_COLUMN);$requiredCourses=$db->query("SELECT prerequisite_course_id FROM course_prerequisites WHERE course_id=$id AND type='course'")->fetchAll(\PDO::FETCH_COLUMN);View::render('admin/course-edit',['title'=>'Modifier la formation','active'=>'admin-courses','course'=>$course,'availableCourses'=>$availableCourses,'skills'=>$skills,'requiredCourses'=>$requiredCourses],'admin'); }
     public function updateCourse(): void
     {
-        $this->guard();$id=(int)($_POST['course_id']??0);$title=mb_substr(trim($_POST['title']??''),0,190);if($id<1||$title===''){$_SESSION['flash']='Titre invalide.';$this->redirect('/admin/cours');}$db=Database::connection();$db->beginTransaction();try{$stmt=$db->prepare('UPDATE courses SET title=?,category=?,mode=?,duration_label=?,price=?,status=?,description=? WHERE id=?');$stmt->execute([$title,trim($_POST['sector']??'Autre'),$_POST['mode']??'Présentiel',trim($_POST['duration']??'1 jour'),max(0,(int)($_POST['price']??0)),in_array($_POST['status']??'', ['draft','published','archived'],true)?$_POST['status']:'draft',trim($_POST['description']??''),$id]);$db->prepare('DELETE FROM course_prerequisites WHERE course_id=?')->execute([$id]);$skillStmt=$db->prepare("INSERT INTO course_prerequisites(course_id,type,skill_name) VALUES(?,'skill',?)");foreach(array_filter(array_map('trim',$_POST['prerequisite_skills']??[])) as $skill)$skillStmt->execute([$id,mb_substr($skill,0,190)]);$courseStmt=$db->prepare("INSERT INTO course_prerequisites(course_id,type,prerequisite_course_id) VALUES(?,'course',?)");foreach(array_unique(array_map('intval',$_POST['prerequisite_courses']??[])) as $requiredId)if($requiredId>0&&$requiredId!==$id)$courseStmt->execute([$id,$requiredId]);$db->commit();$_SESSION['flash']='Formation et prérequis mis à jour.';}catch(\Throwable $e){if($db->inTransaction())$db->rollBack();$_SESSION['flash']='La mise à jour a échoué.';}$this->redirect('/admin/cours/modifier?id='.$id);
+        $this->guard();
+        $id = (int) ($_POST['course_id'] ?? 0);
+        $title = mb_substr(trim($_POST['title'] ?? ''), 0, 190);
+
+        if ($id < 1 || $title === '') {
+            $_SESSION['flash'] = 'Titre invalide.';
+            $this->redirect('/admin/cours');
+        }
+
+        $db = Database::connection();
+        $course = $db->query('SELECT thumbnail FROM courses WHERE id=' . $id)->fetch();
+        $thumbnail = $this->uploadThumbnail($course['thumbnail'] ?? null, '/admin/cours/modifier?id=' . $id);
+        $db->beginTransaction();
+
+        try {
+            $stmt = $db->prepare('UPDATE courses SET title=?,category=?,mode=?,duration_label=?,price=?,status=?,description=?,thumbnail=? WHERE id=?');
+            $stmt->execute([
+                $title,
+                trim($_POST['sector'] ?? 'Autre'),
+                $_POST['mode'] ?? 'Présentiel',
+                trim($_POST['duration'] ?? '1 jour'),
+                max(0, (int) ($_POST['price'] ?? 0)),
+                in_array($_POST['status'] ?? '', ['draft', 'published', 'archived'], true) ? $_POST['status'] : 'draft',
+                trim($_POST['description'] ?? ''),
+                $thumbnail,
+                $id,
+            ]);
+
+            $this->savePrerequisites($db, $id);
+            $db->commit();
+            $_SESSION['flash'] = 'Formation et prérequis mis à jour.';
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $_SESSION['flash'] = 'La mise à jour a échoué.';
+        }
+
+        $this->redirect('/admin/cours/modifier?id=' . $id);
     }
     public function builder(): void { $this->guard();$id=(int)($_GET['course']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$modules=$db->query('SELECT * FROM modules WHERE course_id='.$id.' ORDER BY position,id')->fetchAll();foreach($modules as &$m){$m['lessons']=$db->query('SELECT * FROM lessons WHERE module_id='.(int)$m['id'].' ORDER BY position,id')->fetchAll();$m['assessments']=$db->query('SELECT * FROM assessments WHERE module_id='.(int)$m['id'])->fetchAll();}View::render('admin/builder',['title'=>'Programme du cours','active'=>'admin-courses','course'=>$course,'modules'=>$modules],'admin'); }
     public function builderAction(): void
@@ -98,14 +136,101 @@ final class AdminController
     }
     public function saveCourse(): void
     {
-        $this->guard(); $title=mb_substr(trim($_POST['title']??''),0,190); if($title===''){$_SESSION['flash']='Le titre est obligatoire.';$this->redirect('/admin/cours/nouveau');}
-        $db=Database::connection();$db->beginTransaction();try{$stmt=$db->prepare('INSERT INTO courses(title,slug,category,mode,duration_label,price,tone,status,description) VALUES(?,?,?,?,?,?,?,?,?)');$stmt->execute([$title,strtolower(trim(preg_replace('/[^a-z0-9]+/i','-',$title),'-')),trim($_POST['sector']??'Autre'),$_POST['mode']??'Présentiel',trim($_POST['duration']??'1 jour'),(int)($_POST['price']??0),'navy',$_POST['status']??'draft',trim($_POST['description']??'')]);$courseId=(int)$db->lastInsertId();$skillStmt=$db->prepare("INSERT INTO course_prerequisites(course_id,type,skill_name) VALUES(?,'skill',?)");foreach(array_filter(array_map('trim',$_POST['prerequisite_skills']??[])) as $skill)$skillStmt->execute([$courseId,mb_substr($skill,0,190)]);$courseStmt=$db->prepare("INSERT INTO course_prerequisites(course_id,type,prerequisite_course_id) VALUES(?,'course',?)");foreach(array_unique(array_map('intval',$_POST['prerequisite_courses']??[])) as $requiredId)if($requiredId>0&&$requiredId!==$courseId)$courseStmt->execute([$courseId,$requiredId]);$db->commit();}catch(\Throwable $e){if($db->inTransaction())$db->rollBack();$_SESSION['flash']='La formation n’a pas pu être créée.';$this->redirect('/admin/cours/nouveau');}
+        $this->guard();
+        $title = mb_substr(trim($_POST['title'] ?? ''), 0, 190);
+
+        if ($title === '') {
+            $_SESSION['flash'] = 'Le titre est obligatoire.';
+            $this->redirect('/admin/cours/nouveau');
+        }
+
+        $thumbnail = $this->uploadThumbnail(null, '/admin/cours/nouveau');
+        $db = Database::connection();
+        $db->beginTransaction();
+
+        try {
+            $stmt = $db->prepare('INSERT INTO courses(title,slug,category,mode,duration_label,price,tone,status,description,thumbnail) VALUES(?,?,?,?,?,?,?,?,?,?)');
+            $stmt->execute([
+                $title,
+                strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $title), '-')),
+                trim($_POST['sector'] ?? 'Autre'),
+                $_POST['mode'] ?? 'Présentiel',
+                trim($_POST['duration'] ?? '1 jour'),
+                max(0, (int) ($_POST['price'] ?? 0)),
+                'navy',
+                $_POST['status'] ?? 'draft',
+                trim($_POST['description'] ?? ''),
+                $thumbnail,
+            ]);
+
+            $courseId = (int) $db->lastInsertId();
+            $this->savePrerequisites($db, $courseId);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $_SESSION['flash'] = 'La formation n’a pas pu être créée.';
+            $this->redirect('/admin/cours/nouveau');
+        }
+
         $_SESSION['flash']='Formation créée avec ses prérequis. Ajoutez maintenant ses sections et leçons.'; $this->redirect('/admin/cours/programme?course='.$courseId);
     }
     public function deleteCourse(): void { $this->guard(); $stmt=Database::connection()->prepare('DELETE FROM courses WHERE id=?');$stmt->execute([(int)($_POST['id']??0)]);$_SESSION['flash']='Formation supprimée.';$this->redirect('/admin/cours'); }
     public function products(): void { $this->guard(); $items=Database::connection()->query("SELECT id,name title,CASE stock_status WHEN 'in_stock' THEN 'En stock' WHEN 'on_order' THEN 'Sur commande' ELSE 'Rupture' END stock,price FROM products ORDER BY id DESC")->fetchAll();View::render('admin/resources',['title'=>'Produits','active'=>'admin-products','type'=>'products','items'=>$items],'admin'); }
     public function users(): void { $this->guard(); $items=Database::connection()->query('SELECT id,name,email,role,status FROM users ORDER BY id DESC')->fetchAll();View::render('admin/resources',['title'=>'Utilisateurs','active'=>'admin-users','type'=>'users','items'=>$items],'admin'); }
     public function orders(): void { $this->guard(); $items=Database::connection()->query("SELECT reference,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.name')) customer,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.email')) email,total,payment_method payment,status,created_at FROM orders ORDER BY id DESC")->fetchAll();View::render('admin/resources',['title'=>'Commandes','active'=>'admin-orders','type'=>'orders','items'=>$items],'admin'); }
+    private function savePrerequisites(\PDO $db, int $courseId): void
+    {
+        $db->prepare('DELETE FROM course_prerequisites WHERE course_id=?')->execute([$courseId]);
+
+        $skillStmt = $db->prepare("INSERT INTO course_prerequisites(course_id,type,skill_name) VALUES(?,'skill',?)");
+        foreach (array_filter(array_map('trim', $_POST['prerequisite_skills'] ?? [])) as $skill) {
+            $skillStmt->execute([$courseId, mb_substr($skill, 0, 190)]);
+        }
+
+        $courseStmt = $db->prepare("INSERT INTO course_prerequisites(course_id,type,prerequisite_course_id) VALUES(?,'course',?)");
+        foreach (array_unique(array_map('intval', $_POST['prerequisite_courses'] ?? [])) as $requiredId) {
+            if ($requiredId > 0 && $requiredId !== $courseId) {
+                $courseStmt->execute([$courseId, $requiredId]);
+            }
+        }
+    }
+
+    private function uploadThumbnail(?string $current, string $redirectPath): ?string
+    {
+        if (empty($_FILES['thumbnail']['tmp_name']) || !is_uploaded_file($_FILES['thumbnail']['tmp_name'])) {
+            return $current;
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $file = $_FILES['thumbnail'];
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+
+        if (!isset($allowed[$mime]) || (int) $file['size'] > 5 * 1024 * 1024) {
+            $_SESSION['flash'] = 'Vignette invalide. Utilisez JPG, PNG ou WebP, 5 Mo maximum.';
+            $this->redirect($redirectPath);
+        }
+
+        $directory = dirname(__DIR__, 2) . '/public/uploads/courses';
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            $_SESSION['flash'] = 'Impossible de créer le dossier des vignettes.';
+            $this->redirect($redirectPath);
+        }
+
+        $filename = 'thumbnail-' . date('YmdHis') . '-' . bin2hex(random_bytes(8)) . '.' . $allowed[$mime];
+        if (!move_uploaded_file($file['tmp_name'], $directory . '/' . $filename)) {
+            $_SESSION['flash'] = 'Impossible d’enregistrer la vignette.';
+            $this->redirect($redirectPath);
+        }
+
+        return '/public/uploads/courses/' . $filename;
+    }
+
     private function redirect(string $path): never { header('Location: '.$this->baseUrl($path)); exit; }
     public function branding(): void { $this->guard(); View::render('admin/branding', ['title'=>'Identité visuelle','active'=>'admin-branding','brand'=>$_SESSION['brand'] ?? ['name'=>'IFMAP Learning','primary'=>'#5547e8','accent'=>'#f59e0b']], 'admin'); }
     public function saveBranding(): void {

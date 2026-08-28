@@ -9,8 +9,24 @@ final class SiteController
 {
     private function trainingData(): array
     {
-        try { return array_map(fn($r)=>['id'=>$r['id'],'slug'=>$r['slug'],'title'=>$r['title'],'sector'=>$r['category'],'mode'=>$r['mode'],'duration'=>$r['duration_label'],'price'=>(int)$r['price'],'tone'=>$r['tone'],'status'=>$r['status']], Database::connection()->query("SELECT * FROM courses WHERE status='published' ORDER BY id DESC")->fetchAll()); } catch(\Throwable) {} return [
-            ['slug'=>'sous-gerant-station-service','title'=>'Le Métier de Sous-Gérant en Station-Service','sector'=>'Aval pétrolier','mode'=>'Présentiel','duration'=>'4 jours','price'=>75000,'tone'=>'navy'],
+        try {
+            return array_map(fn($course) => [
+                'id' => $course['id'],
+                'slug' => $course['slug'],
+                'title' => $course['title'],
+                'sector' => $course['category'],
+                'mode' => $course['mode'],
+                'duration' => $course['duration_label'],
+                'price' => (int) $course['price'],
+                'tone' => $course['tone'],
+                'thumbnail' => $course['thumbnail'],
+                'status' => $course['status'],
+            ], Database::connection()->query("SELECT * FROM courses WHERE status='published' ORDER BY id DESC")->fetchAll());
+        } catch (\Throwable) {
+        }
+
+        return [
+            ['slug'=>'sous-gerant-station-service','title'=>'Le Métier de Sous-Gérant en Station-Service','sector'=>'Aval pétrolier','mode'=>'Présentiel','duration'=>'4 jours','price'=>75000,'tone'=>'navy','thumbnail'=>null],
             ['slug'=>'depotage-carburant','title'=>'Le Dépotage du Carburant en Station-Service','sector'=>'Aval pétrolier','mode'=>'En ligne','duration'=>'8 heures','price'=>45000,'tone'=>'gold'],
             ['slug'=>'graissage-lubrifiants','title'=>'Graissage et Vente des Lubrifiants','sector'=>'Aval pétrolier','mode'=>'Mixte','duration'=>'3 jours','price'=>50000,'tone'=>'green'],
             ['slug'=>'installation-solaire','title'=>'Installation et Maintenance Solaire','sector'=>'Énergie solaire','mode'=>'Présentiel','duration'=>'5 jours','price'=>95000,'tone'=>'sun'],
