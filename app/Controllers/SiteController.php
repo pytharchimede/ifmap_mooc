@@ -91,11 +91,17 @@ final class SiteController
     public function placeOrder(): void
     {
         if (empty($_SESSION['cart'])) $this->redirect('/panier');
+        $hasProduct = isset($_SESSION['cart']['product']);
+        if (!$hasProduct) { $_POST['delivery']='pickup'; if(($_POST['payment']??'')==='delivery')$_POST['payment']='online'; }
         $required=['name','email','phone','payment','delivery']; foreach($required as $field) if(trim($_POST[$field]??'')===''){$_SESSION['checkout_error']='Veuillez remplir tous les champs obligatoires.';$this->redirect('/commande');}
         if(!filter_var($_POST['email'],FILTER_VALIDATE_EMAIL)){$_SESSION['checkout_error']='Adresse email invalide.';$this->redirect('/commande');}
         $subtotal=array_sum(array_map(fn($i)=>$i['price']*$i['quantity'],$_SESSION['cart']));
-        $db=Database::connection();$db->beginTransaction();try{$reference='IF-'.date('Y').'-'.str_pad((string)((int)$db->query('SELECT COUNT(*)+1 FROM orders')->fetchColumn()),4,'0',STR_PAD_LEFT);$userId=$_SESSION['user']['id']??null;$status=$_POST['payment']==='delivery'?'pending':'paid';$paymentStatus=$_POST['payment']==='delivery'?'cod':'paid';$customer=['name'=>trim($_POST['name']),'email'=>trim($_POST['email']),'phone'=>trim($_POST['phone'])];$stmt=$db->prepare('INSERT INTO orders(user_id,reference,status,payment_method,payment_status,delivery_method,subtotal,total,customer_data) VALUES(?,?,?,?,?,?,?,?,?)');$stmt->execute([$userId,$reference,$status,$_POST['payment'],$paymentStatus,$_POST['delivery'],$subtotal,$subtotal,json_encode($customer,JSON_UNESCAPED_UNICODE)]);$orderId=(int)$db->lastInsertId();$itemStmt=$db->prepare('INSERT INTO order_items(order_id,item_type,item_id,label,quantity,unit_price,total) VALUES(?,?,?,?,?,?,?)');foreach($_SESSION['cart'] as $key=>$item)$itemStmt->execute([$orderId,$key==='training'?'course':'product',0,$item['name'],$item['quantity'],$item['price'],$item['price']*$item['quantity']]);$db->commit();$order=['id'=>$orderId,'reference'=>$reference,'customer'=>$customer['name'],'email'=>$customer['email'],'payment'=>$_POST['payment'],'items'=>$_SESSION['cart'],'total'=>$subtotal,'status'=>$status,'created_at'=>date('c')];}catch(\Throwable $e){if($db->inTransaction())$db->rollBack();$_SESSION['checkout_error']='La commande n’a pas pu être enregistrée.';$this->redirect('/commande');}
-        if(isset($_SESSION['cart']['training'])) $_SESSION['enrolled']=true;
+        $db=Database::connection();$db->beginTransaction();try{
+            $reference='IF-'.date('Y').'-'.str_pad((string)((int)$db->query('SELECT COUNT(*)+1 FROM orders')->fetchColumn()),4,'0',STR_PAD_LEFT);$userId=$_SESSION['user']['id']??null;$status=$_POST['payment']==='delivery'?'pending':'paid';$paymentStatus=$_POST['payment']==='delivery'?'cod':'paid';$customer=['name'=>trim($_POST['name']),'email'=>trim($_POST['email']),'phone'=>trim($_POST['phone'])];
+            $stmt=$db->prepare('INSERT INTO orders(user_id,reference,status,payment_method,payment_status,delivery_method,subtotal,total,customer_data) VALUES(?,?,?,?,?,?,?,?,?)');$stmt->execute([$userId,$reference,$status,$_POST['payment'],$paymentStatus,$_POST['delivery'],$subtotal,$subtotal,json_encode($customer,JSON_UNESCAPED_UNICODE)]);$orderId=(int)$db->lastInsertId();$itemStmt=$db->prepare('INSERT INTO order_items(order_id,item_type,item_id,label,quantity,unit_price,total) VALUES(?,?,?,?,?,?,?)');
+            foreach($_SESSION['cart'] as $key=>$item){$itemId=$key==='training'?(int)($item['course_id']??0):0;$itemStmt->execute([$orderId,$key==='training'?'course':'product',$itemId,$item['name'],$item['quantity'],$item['price'],$item['price']*$item['quantity']]);if($key==='training'&&$userId&&$paymentStatus==='paid'&&$itemId){$db->prepare("INSERT INTO enrollments(user_id,course_id,status,source) VALUES(?,?,'active','purchase') ON DUPLICATE KEY UPDATE status='active'")->execute([$userId,$itemId]);}}
+            $db->commit();$order=['id'=>$orderId,'reference'=>$reference,'customer'=>$customer['name'],'email'=>$customer['email'],'payment'=>$_POST['payment'],'items'=>$_SESSION['cart'],'total'=>$subtotal,'status'=>$status,'created_at'=>date('c')];
+        }catch(\Throwable $e){if($db->inTransaction())$db->rollBack();$_SESSION['checkout_error']='La commande n’a pas pu être enregistrée.';$this->redirect('/commande');}
         $_SESSION['last_order']=$order; $_SESSION['cart']=[]; $this->redirect('/commande/confirmation');
     }
     public function confirmation(): void { if(empty($_SESSION['last_order'])) $this->redirect('/'); View::render('site/confirmation',['title'=>'Commande confirmée','active'=>'cart','order'=>$_SESSION['last_order']],'site'); }
@@ -109,7 +115,7 @@ final class SiteController
     }
     public function savePassword(): void
     {
-        if(empty($_SESSION['user']))$this->redirect('/connexion');$current=(string)($_POST['current_password']??'');$password=(string)($_POST['password']??'');$confirmation=(string)($_POST['password_confirmation']??'');$stmt=Database::connection()->prepare('SELECT password FROM users WHERE id=?');$stmt->execute([$_SESSION['user']['id']]);$hash=$stmt->fetchColumn();if(!$hash||!password_verify($current,$hash)){$_SESSION['profile_error']='Le mot de passe actuel est incorrect.';$this->redirect('/profil');}if(strlen($password)<8||$password!==$confirmation){$_SESSION['profile_error']='Le nouveau mot de passe doit contenir 8 caractères minimum et les deux saisies doivent correspondre.';$this->redirect('/profil');}$stmt=Database::connection()->prepare('UPDATE users SET password=? WHERE id=?');$stmt->execute([password_hash($password,PASSWORD_DEFAULT),$_SESSION['user']['id']]);$_SESSION['profile_flash']='Mot de passe modifié avec succès.';$this->redirect('/profil');
+        if(empty($_SESSION['user']))$this->redirect('/connexion');$current=(string)($_POST['current_password']??'');$password=(string)($_POST['password']??'');$confirmation=(string)($_POST['password_confirmation']??'');$stmt=Database::connection()->prepare('SELECT password FROM users WHERE id=?');$stmt->execute([$_SESSION['user']['id']]);$hash=$stmt->fetchColumn();if(!$hash||!password_verify($current,$hash)){$_SESSION['profile_error']='Le mot de passe actuel est incorrect.';$this->redirect('/academie#profil');}if(strlen($password)<8||$password!==$confirmation){$_SESSION['profile_error']='Le nouveau mot de passe doit contenir 8 caractères minimum et les deux saisies doivent correspondre.';$this->redirect('/academie#profil');}$stmt=Database::connection()->prepare('UPDATE users SET password=? WHERE id=?');$stmt->execute([password_hash($password,PASSWORD_DEFAULT),$_SESSION['user']['id']]);$_SESSION['profile_flash']='Mot de passe modifié avec succès.';$this->redirect('/academie#profil');
     }
     public function addCart(): void
     {
@@ -125,7 +131,7 @@ final class SiteController
                 $_SESSION['flash'] = 'Cette formation n’est plus disponible.';
                 $this->redirect('/formations');
             }
-            $_SESSION['cart'][$type] = ['name' => $course['title'], 'quantity' => 1, 'price' => (int) $course['price']];
+            $_SESSION['cart'][$type] = ['name' => $course['title'], 'quantity' => 1, 'price' => (int) $course['price'], 'course_id' => $courseId, 'kind' => 'formation'];
         }
         $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
         header('Location: ' . $base . '/panier'); exit;

@@ -10,37 +10,44 @@ document.querySelectorAll("[data-table-search]").forEach((input) =>
   }),
 );
 
-const publicSearch = document.querySelector(".site-search input");
-publicSearch?.addEventListener("input", () => {
-  const query = publicSearch.value.toLocaleLowerCase();
-  document
-    .querySelectorAll(".training-card")
-    .forEach(
-      (card) =>
-        (card.hidden = !card.textContent.toLocaleLowerCase().includes(query)),
-    );
-});
-
-document.querySelectorAll(".site-filters input").forEach((filter) =>
-  filter.addEventListener("change", () => {
-    const selected = [
-      ...document.querySelectorAll(".site-filters input:checked"),
-    ].map((input) =>
-      input.parentElement.textContent.trim().toLocaleLowerCase(),
-    );
-    document.querySelectorAll(".training-card").forEach((card) => {
-      card.hidden =
-        selected.length > 1 &&
-        !selected.some(
-          (value) =>
-            value.includes("toutes") ||
-            card.textContent
-              .toLocaleLowerCase()
-              .includes(value.replace(/\d+/g, "").trim()),
-        );
+const trainingCatalog = document.querySelector("[data-training-catalog]");
+if (trainingCatalog) {
+  const normalize = (value) => value.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const cards = [...trainingCatalog.querySelectorAll(".training-card")];
+  const grid = trainingCatalog.querySelector("[data-training-grid]");
+  const search = document.querySelector("[data-training-search]");
+  const sort = trainingCatalog.querySelector("[data-training-sort]");
+  const price = trainingCatalog.querySelector("[data-max-price]");
+  const applyFilters = () => {
+    const query = normalize(search.value.trim());
+    const sectors = [...trainingCatalog.querySelectorAll('[name="sector"]:checked')].map((item) => item.value);
+    const modes = [...trainingCatalog.querySelectorAll('[name="mode"]:checked')].map((item) => item.value);
+    const maximum = Number(price.value) || Infinity;
+    let visible = 0;
+    cards.forEach((card) => {
+      const show = (!query || normalize(card.dataset.title).includes(query)) && (!sectors.length || sectors.includes(card.dataset.sector)) && (!modes.length || modes.includes(card.dataset.mode)) && Number(card.dataset.price) <= maximum;
+      card.hidden = !show;
+      if (show) visible++;
     });
-  }),
-);
+    trainingCatalog.querySelector("[data-result-count]").textContent = visible;
+    trainingCatalog.querySelector("[data-catalog-empty]").hidden = visible !== 0;
+    const chips = trainingCatalog.querySelector("[data-active-filters]");
+    const values = [...sectors, ...modes, ...(price.value ? [`≤ ${Number(price.value).toLocaleString("fr-FR")} FCFA`] : [])];
+    chips.hidden = values.length === 0;
+    chips.innerHTML = values.map((value) => `<span>${value}</span>`).join("");
+  };
+  const applySort = () => {
+    const mode = sort.value;
+    [...cards].sort((a, b) => mode === "price-asc" ? a.dataset.price - b.dataset.price : mode === "price-desc" ? b.dataset.price - a.dataset.price : mode === "title" ? a.dataset.title.localeCompare(b.dataset.title) : 0).forEach((card) => grid.append(card));
+  };
+  search.addEventListener("input", applyFilters);
+  price.addEventListener("input", applyFilters);
+  trainingCatalog.querySelectorAll('input[type="checkbox"]').forEach((input) => input.addEventListener("change", applyFilters));
+  sort.addEventListener("change", applySort);
+  document.querySelectorAll("[data-reset-filters]").forEach((button) => button.addEventListener("click", () => { search.value = ""; price.value = ""; trainingCatalog.querySelectorAll('input[type="checkbox"]').forEach((input) => input.checked = false); applyFilters(); }));
+  trainingCatalog.querySelector("[data-toggle-filters]")?.addEventListener("click", () => trainingCatalog.querySelector("[data-filter-panel]").classList.toggle("open"));
+  document.addEventListener("keydown", (event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); search.focus(); } });
+}
 
 document
   .querySelectorAll(".shop-section .filter-chips button")
@@ -83,13 +90,44 @@ document
     program.className = "btn secondary";
     program.textContent = "Programme";
     program.href = `${base}/admin/cours/programme?course=${id}`;
+    const exams = document.createElement("a");
+    exams.className = "btn secondary";
+    exams.textContent = "Examens";
+    exams.href = `${base}/admin/cours/examens?course=${id}`;
+    const preview = document.createElement("a");
+    preview.className = "btn secondary";
+    preview.textContent = "Voir le cours";
+    preview.href = `${base}/academie/formation?course=${id}`;
+    preview.target = "_blank";
     const edit = document.createElement("a");
     edit.className = "btn secondary";
     edit.textContent = "Modifier";
     edit.href = `${base}/admin/cours/modifier?id=${id}`;
     form.parentElement.prepend(program);
+    form.parentElement.prepend(exams);
+    form.parentElement.prepend(preview);
     form.parentElement.prepend(edit);
   });
+
+const builderCourseId = document.querySelector(
+  '.builder-layout input[name="course_id"]',
+)?.value;
+if (builderCourseId) {
+  const base = location.pathname.split("/admin/")[0];
+  const actions = document.querySelector(".admin-welcome > a")?.parentElement;
+  if (actions) {
+    const exams = document.createElement("a");
+    exams.className = "btn secondary";
+    exams.textContent = "Voir les examens";
+    exams.href = `${base}/admin/cours/examens?course=${builderCourseId}`;
+    const preview = document.createElement("a");
+    preview.className = "btn primary";
+    preview.textContent = "Prévisualiser le cours";
+    preview.href = `${base}/academie/formation?course=${builderCourseId}`;
+    preview.target = "_blank";
+    actions.append(exams, preview);
+  }
+}
 
 document.querySelectorAll("form.builder-form").forEach((form) => {
   const action = form.querySelector("[name=builder_action]")?.value;
@@ -177,6 +215,18 @@ document.querySelectorAll(".main-nav a").forEach((link) => {
     link.href = `${base}/profil`;
   }
 });
+
+const adminUsersLink = [...document.querySelectorAll(".admin-sidebar .main-nav a")].find(
+  (link) => link.textContent.trim() === "Utilisateurs",
+);
+if (adminUsersLink && !document.querySelector('a[href$="/admin/inscriptions"]')) {
+  const base = location.pathname.split("/admin")[0];
+  const enrollments = document.createElement("a");
+  enrollments.href = `${base}/admin/inscriptions`;
+  enrollments.innerHTML = '<i data-icon="book"></i>Inscriptions aux cours';
+  if (location.pathname.endsWith("/admin/inscriptions")) enrollments.className = "active";
+  adminUsersLink.after(enrollments);
+}
 
 const cloneRepeat = (listSelector) => {
   const list = document.querySelector(listSelector);

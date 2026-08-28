@@ -9,18 +9,7 @@ final class ProfileController
     public function show(): void
     {
         $this->guard();
-        $stmt = Database::connection()->prepare('SELECT id,name,email,phone,avatar,specialty,bio,cv_path,role FROM users WHERE id=?');
-        $stmt->execute([$_SESSION['user']['id']]);
-        $user = $stmt->fetch() ?: $_SESSION['user'];
-
-        View::render('site/profile', [
-            'title' => 'Mon profil',
-            'active' => 'account',
-            'user' => $user,
-            'flash' => $_SESSION['profile_flash'] ?? null,
-            'error' => $_SESSION['profile_error'] ?? null,
-        ], 'site');
-        unset($_SESSION['profile_flash'], $_SESSION['profile_error']);
+        $this->redirect('/academie#profil');
     }
 
     public function save(): void
@@ -31,10 +20,12 @@ final class ProfileController
         $phone = trim($_POST['phone'] ?? '');
         $specialty = trim($_POST['specialty'] ?? '');
         $bio = trim($_POST['bio'] ?? '');
+        $currentRole = (string) ($_SESSION['user']['role'] ?? 'learner');
+        $role = $currentRole === 'admin' ? 'admin' : (($_POST['role'] ?? '') === 'instructor' ? 'instructor' : 'learner');
 
         if ($name === '') {
             $_SESSION['profile_error'] = 'Le nom est obligatoire.';
-            $this->redirect('/profil');
+            $this->redirect('/academie#profil');
         }
 
         $db = Database::connection();
@@ -44,13 +35,14 @@ final class ProfileController
         $avatar = $this->upload($userId, 'avatar', ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'], 5, 'avatars', $current['avatar'] ?? null);
         $cv = $this->upload($userId, 'cv', ['application/pdf' => 'pdf', 'application/msword' => 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx'], 10, 'cvs', $current['cv_path'] ?? null);
 
-        $stmt = $db->prepare('UPDATE users SET name=?,phone=?,specialty=?,bio=?,avatar=?,cv_path=? WHERE id=?');
-        $stmt->execute([$name, $phone, $specialty, $bio, $avatar, $cv, $userId]);
+        $stmt = $db->prepare('UPDATE users SET name=?,phone=?,specialty=?,bio=?,avatar=?,cv_path=?,role=? WHERE id=?');
+        $stmt->execute([$name, $phone, $specialty, $bio, $avatar, $cv, $role, $userId]);
         $_SESSION['user']['name'] = $name;
         $_SESSION['user']['phone'] = $phone;
         $_SESSION['user']['avatar'] = $avatar;
+        $_SESSION['user']['role'] = $role;
         $_SESSION['profile_flash'] = 'Profil mis à jour.';
-        $this->redirect('/profil');
+        $this->redirect('/academie#profil');
     }
 
     private function upload(int $userId, string $field, array $allowed, int $maxSize, string $directoryName, ?string $current): ?string
@@ -65,19 +57,19 @@ final class ProfileController
             $_SESSION['profile_error'] = $field === 'cv'
                 ? 'CV invalide. Utilisez un fichier PDF, DOC ou DOCX de 10 Mo maximum.'
                 : 'Photo invalide. Utilisez JPG, PNG ou WebP, 5 Mo maximum.';
-            $this->redirect('/profil');
+            $this->redirect('/academie#profil');
         }
 
         $directory = dirname(__DIR__, 2) . '/public/uploads/' . $directoryName;
         if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
             $_SESSION['profile_error'] = 'Impossible de créer le dossier du fichier.';
-            $this->redirect('/profil');
+            $this->redirect('/academie#profil');
         }
 
         $filename = $field . '-' . $userId . '-' . bin2hex(random_bytes(5)) . '.' . $allowed[$mime];
         if (!move_uploaded_file($file['tmp_name'], $directory . '/' . $filename)) {
             $_SESSION['profile_error'] = 'Impossible d’enregistrer le fichier.';
-            $this->redirect('/profil');
+            $this->redirect('/academie#profil');
         }
 
         return '/public/uploads/' . $directoryName . '/' . $filename;

@@ -142,9 +142,9 @@
 			<input type="hidden" name="course_id" value="<?= (int) $courseData['id'] ?>">
 			<button class="site-btn gold wide">S’inscrire et payer en ligne →</button>
 		</form>
+		<?php if (!empty($_SESSION['user'])): ?><form method="post" action="/academie/inscrire"><input type="hidden" name="course_id" value="<?= (int)$courseData['id'] ?>"><button class="site-btn outline wide">M’inscrire directement au cours</button></form><?php else: ?><a class="site-btn outline wide" href="/inscription?course=<?= (int)$courseData['id'] ?>">Créer mon compte et me préinscrire</a><?php endif ?>
 		<p class="safe">🔒 Paiement sécurisé · Accès immédiat</p>
 		<div class="payment-list"><span>Orange<br><b>Money</b></span><span>MTN<br><b>MoMo</b></span><span>Moov<br><b>Money</b></span><span>Wave</span><span>VISA</span></div>
 		<div class="access-note"><span>↗</span><p><strong>Accès automatique</strong><br>Après paiement, la formation apparaît dans votre espace « Mes formations ».</p></div>
 	</aside>
 </section>
-

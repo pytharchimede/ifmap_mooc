@@ -39,13 +39,14 @@ final class AdminController
         $admin = null;
         if (!$valid) {
             try {
-                $stmt = Database::connection()->prepare("SELECT id,name,email,password,role FROM users WHERE email=? AND role='admin' LIMIT 1");
-                $stmt->execute([$identifier]);
+                $phone=preg_replace('/[^0-9+]/','',$identifier);$stmt = Database::connection()->prepare("SELECT id,name,email,phone,password,role,status FROM users WHERE (LOWER(email)=LOWER(?) OR phone=?) AND role='admin' LIMIT 1");
+                $stmt->execute([$identifier,$phone]);
                 $admin = $stmt->fetch() ?: null;
-                $valid = $admin && password_verify($password, $admin['password']);
+                $valid = $admin && ($admin['status']??'active')==='active' && password_verify($password, $admin['password']);
             } catch (\Throwable) { $valid = false; }
         }
         if ($valid) {
+            if (!$admin) { try { $admin=Database::connection()->query("SELECT id,name,email,role FROM users WHERE role='admin' ORDER BY id LIMIT 1")->fetch()?:null; } catch (\Throwable) {} }
             session_regenerate_id(true);
             $_SESSION['admin_authenticated'] = true;
             $_SESSION['admin_name'] = $admin['name'] ?? 'Administrateur IFMAP';
@@ -58,11 +59,11 @@ final class AdminController
 
     public function logout(): void
     {
-        unset($_SESSION['admin_authenticated'], $_SESSION['admin_name']);
+        unset($_SESSION['admin_authenticated'], $_SESSION['admin_name'], $_SESSION['user']);
         header('Location: ' . $this->baseUrl('/admin/connexion')); exit;
     }
 
-    public function index(): void { $this->guard(); $courses=Database::connection()->query("SELECT c.id,c.title,c.category,COALESCE(ROUND(AVG(e.progress)),0) progress,COUNT(e.user_id) enrolled,c.tone color FROM courses c LEFT JOIN enrollments e ON e.course_id=c.id GROUP BY c.id ORDER BY enrolled DESC LIMIT 5")->fetchAll(); View::render('admin/dashboard', ['title'=>'Vue d’ensemble','active'=>'admin-dashboard','courses'=>$courses], 'admin'); }
+    public function index(): void { $this->guard(); $db=Database::connection();$courses=$db->query("SELECT c.id,c.title,c.category,COALESCE(ROUND(AVG(e.progress)),0) progress,COUNT(e.user_id) enrolled,c.tone color FROM courses c LEFT JOIN enrollments e ON e.course_id=c.id GROUP BY c.id ORDER BY enrolled DESC LIMIT 5")->fetchAll();$metrics=['users'=>(int)$db->query("SELECT COUNT(*) FROM users WHERE role<>'admin'")->fetchColumn(),'pending'=>(int)$db->query("SELECT COUNT(*) FROM users WHERE status='disabled'")->fetchColumn(),'enrollments'=>(int)$db->query("SELECT COUNT(*) FROM enrollments")->fetchColumn(),'revenue'=>(float)$db->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE payment_status='paid'")->fetchColumn(),'pendingRevenue'=>(float)$db->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE payment_status IN ('pending','cod')")->fetchColumn()]; View::render('admin/dashboard', ['title'=>'Vue d’ensemble','active'=>'admin-dashboard','courses'=>$courses,'metrics'=>$metrics], 'admin'); }
     public function courses(): void { $this->guard(); $courses=Database::connection()->query("SELECT id,title,category sector,mode,duration_label duration,price,tone,status FROM courses ORDER BY id DESC")->fetchAll(); View::render('admin/courses', ['title'=>'Gestion des cours','active'=>'admin-courses','courses'=>$courses], 'admin'); }
     public function courseForm(): void { $this->guard(); $db=Database::connection(); $availableCourses=$db->query("SELECT id,title FROM courses WHERE status IN ('published','draft') ORDER BY title")->fetchAll(); $instructors=$db->query("SELECT id,name FROM users WHERE role='instructor' AND status='active' ORDER BY name")->fetchAll(); View::render('admin/course-form',['title'=>'Nouvelle formation','active'=>'admin-courses','availableCourses'=>$availableCourses,'instructors'=>$instructors],'admin'); }
     public function editCourse(): void { $this->guard();$id=(int)($_GET['id']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$availableCourses=$db->query("SELECT id,title FROM courses WHERE id<>$id ORDER BY title")->fetchAll();$instructors=$db->query("SELECT id,name FROM users WHERE role='instructor' AND status='active' ORDER BY name")->fetchAll();$skills=$db->query("SELECT skill_name FROM course_prerequisites WHERE course_id=$id AND type='skill' ORDER BY id")->fetchAll(\PDO::FETCH_COLUMN);$requiredCourses=$db->query("SELECT prerequisite_course_id FROM course_prerequisites WHERE course_id=$id AND type='course'")->fetchAll(\PDO::FETCH_COLUMN);View::render('admin/course-edit',['title'=>'Modifier la formation','active'=>'admin-courses','course'=>$course,'availableCourses'=>$availableCourses,'instructors'=>$instructors,'skills'=>$skills,'requiredCourses'=>$requiredCourses],'admin'); }
@@ -110,6 +111,7 @@ final class AdminController
         $this->redirect('/admin/cours/modifier?id=' . $id);
     }
     public function builder(): void { $this->guard();$id=(int)($_GET['course']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$modules=$db->query('SELECT * FROM modules WHERE course_id='.$id.' ORDER BY position,id')->fetchAll();foreach($modules as &$m){$m['lessons']=$db->query('SELECT * FROM lessons WHERE module_id='.(int)$m['id'].' ORDER BY position,id')->fetchAll();$m['assessments']=$db->query('SELECT * FROM assessments WHERE module_id='.(int)$m['id'])->fetchAll();}View::render('admin/builder',['title'=>'Programme du cours','active'=>'admin-courses','course'=>$course,'modules'=>$modules],'admin'); }
+    public function exams(): void { $this->guard();$id=(int)($_GET['course']??0);$db=Database::connection();$course=$db->query('SELECT id,title FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$assessments=$db->query("SELECT a.*,m.title module_title,(SELECT COUNT(*) FROM questions q WHERE q.assessment_id=a.id) question_count FROM assessments a LEFT JOIN modules m ON m.id=a.module_id WHERE a.course_id=$id ORDER BY a.type,a.id")->fetchAll();View::render('admin/exams',['title'=>'Compositions et examen final','active'=>'admin-courses','course'=>$course,'assessments'=>$assessments],'admin'); }
     public function builderAction(): void
     {
         $this->guard(); $db=Database::connection(); $courseId=(int)($_POST['course_id']??0); $action=$_POST['builder_action']??'';
@@ -180,7 +182,9 @@ final class AdminController
     }
     public function deleteCourse(): void { $this->guard(); $stmt=Database::connection()->prepare('DELETE FROM courses WHERE id=?');$stmt->execute([(int)($_POST['id']??0)]);$_SESSION['flash']='Formation supprimée.';$this->redirect('/admin/cours'); }
     public function products(): void { $this->guard(); $items=Database::connection()->query("SELECT id,name title,CASE stock_status WHEN 'in_stock' THEN 'En stock' WHEN 'on_order' THEN 'Sur commande' ELSE 'Rupture' END stock,price FROM products ORDER BY id DESC")->fetchAll();View::render('admin/resources',['title'=>'Produits','active'=>'admin-products','type'=>'products','items'=>$items],'admin'); }
-    public function users(): void { $this->guard(); $items=Database::connection()->query('SELECT id,name,email,role,status FROM users ORDER BY id DESC')->fetchAll();View::render('admin/resources',['title'=>'Utilisateurs','active'=>'admin-users','type'=>'users','items'=>$items],'admin'); }
+    public function users(): void { $this->guard(); $items=Database::connection()->query('SELECT id,name,email,phone,role,status,created_at FROM users ORDER BY id DESC')->fetchAll();View::render('admin/resources',['title'=>'Utilisateurs','active'=>'admin-users','type'=>'users','items'=>$items],'admin'); }
+    public function activateUser(): void { $this->guard();$id=(int)($_POST['id']??0);$db=Database::connection();$db->prepare("UPDATE users SET status='active',phone_verified_at=COALESCE(phone_verified_at,NOW()),otp_code=NULL,otp_expires_at=NULL WHERE id=?")->execute([$id]);$db->prepare("UPDATE enrollments SET status='active' WHERE user_id=? AND status='pending'")->execute([$id]);$_SESSION['flash']='Compte et inscriptions activés.';$this->redirect('/admin/utilisateurs'); }
+    public function enrollments(): void { $this->guard();$items=Database::connection()->query("SELECT e.enrolled_at,e.status,e.progress,u.name,u.email,u.phone,c.title course_title FROM enrollments e JOIN users u ON u.id=e.user_id JOIN courses c ON c.id=e.course_id ORDER BY e.enrolled_at DESC")->fetchAll();View::render('admin/enrollments',['title'=>'Inscriptions aux cours','active'=>'admin-enrollments','items'=>$items],'admin'); }
     public function orders(): void { $this->guard(); $items=Database::connection()->query("SELECT reference,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.name')) customer,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.email')) email,total,payment_method payment,status,created_at FROM orders ORDER BY id DESC")->fetchAll();View::render('admin/resources',['title'=>'Commandes','active'=>'admin-orders','type'=>'orders','items'=>$items],'admin'); }
     private function savePrerequisites(\PDO $db, int $courseId): void
     {
