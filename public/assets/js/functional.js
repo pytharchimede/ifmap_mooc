@@ -10,3 +10,5 @@ document.querySelectorAll('.shop-section .filter-chips button').forEach((button,
 document.querySelectorAll('.program-line').forEach(line=>line.addEventListener('click',()=>line.classList.toggle('expanded')));
 
 document.querySelector('.lesson-nav .primary')?.addEventListener('click',event=>{event.currentTarget.textContent='✓ Leçon terminée';event.currentTarget.disabled=true;const progress=document.querySelector('.learn-progress .progress span');if(progress)progress.style.width='76%'});
+
+document.querySelectorAll('form[action$="/admin/cours/supprimer"]').forEach(form=>{const id=form.querySelector('[name=id]')?.value;if(!id)return;const link=document.createElement('a');link.className='btn secondary';link.textContent='Programme';const base=location.pathname.split('/admin/')[0];link.href=`${base}/admin/cours/programme?course=${id}`;form.parentElement.prepend(link)});
