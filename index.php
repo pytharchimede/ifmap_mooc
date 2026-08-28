@@ -4,9 +4,11 @@ declare(strict_types=1);
 use App\Core\Env;
 use App\Core\Router;
 
-$sessionPath = __DIR__ . '/storage/sessions';
-if (!is_dir($sessionPath)) mkdir($sessionPath, 0775, true);
-session_save_path($sessionPath);
+if (PHP_SAPI === 'cli') {
+    $sessionPath = __DIR__ . '/storage/sessions';
+    if (!is_dir($sessionPath)) mkdir($sessionPath, 0775, true);
+    session_save_path($sessionPath);
+}
 session_start();
 
 spl_autoload_register(function (string $class): void {
@@ -30,6 +32,15 @@ if ($basePath !== '' && ($requestPath === $basePath || str_starts_with($requestP
 ob_start();
 $router->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', $requestPath);
 $html = ob_get_clean();
+if (!empty($_SESSION['user']['name'])) {
+    $viewerName = htmlspecialchars((string)$_SESSION['user']['name'], ENT_QUOTES, 'UTF-8');
+    $firstName = htmlspecialchars(explode(' ', (string)$_SESSION['user']['name'])[0], ENT_QUOTES, 'UTF-8');
+    $parts = preg_split('/\s+/', trim((string)$_SESSION['user']['name'])) ?: [];
+    $initials = htmlspecialchars(strtoupper(substr($parts[0] ?? 'U', 0, 1) . substr($parts[count($parts)-1] ?? '', 0, 1)), ENT_QUOTES, 'UTF-8');
+    $html = str_replace(['Assa Kouamé', 'Bonjour Assa', '>AK<'], [$viewerName, 'Bonjour ' . $firstName, '>' . $initials . '<'], $html);
+}
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/functional.css"></head>', $html);
+$html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(
         ['href="/', 'src="/', 'action="/'],

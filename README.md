@@ -26,4 +26,6 @@ Avec Apache, le fichier `.htaccess` redirige automatiquement toutes les URLs ver
 
 Le prototype utilise des données de démonstration pour être immédiatement navigable. Le schéma MySQL couvre utilisateurs, rôles, cours, modules, leçons, inscriptions, progression, produits, commandes mixtes, paiements, livraison, attestations et réglages de marque.
 
+Si MySQL est momentanément indisponible, l'application utilise `storage/data.json` comme stockage persistant de secours : le panier, les commandes et les créations de formations restent fonctionnels. Après correction des droits MySQL, relancer `php migrate.php` pour installer le schéma complet.
+
 # ifmap_mooc

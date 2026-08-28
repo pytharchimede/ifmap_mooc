@@ -14,19 +14,15 @@ final class Migrator
             $name = basename($file);
             if (in_array($name, $done, true)) continue;
             $migration = require $file;
-            $db->beginTransaction();
             try {
                 $migration($db);
                 $stmt = $db->prepare('INSERT INTO migrations (migration, batch) VALUES (?, ?)');
                 $stmt->execute([$name, $batch]);
-                $db->commit();
                 $ran[] = $name;
             } catch (\Throwable $e) {
-                $db->rollBack();
                 throw $e;
             }
         }
         return $ran;
     }
 }
-
