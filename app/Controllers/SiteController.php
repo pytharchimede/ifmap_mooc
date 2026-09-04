@@ -37,7 +37,7 @@ final class SiteController
 
     private function products(): array
     {
-        try { return array_map(fn($r)=>['id'=>$r['id'],'slug'=>$r['slug'],'title'=>$r['name'],'stock'=>$r['stock_status']==='in_stock'?'En stock':($r['stock_status']==='on_order'?'Sur commande':'Rupture'),'price'=>$r['price']===null?null:(int)$r['price'],'tone'=>'navy'], Database::connection()->query("SELECT * FROM products WHERE status='published' ORDER BY id DESC")->fetchAll()); } catch(\Throwable) {} return [
+        try { return array_map(fn($r)=>['id'=>$r['id'],'slug'=>$r['slug'],'title'=>$r['name'],'description'=>$r['description'],'category'=>$r['category']??'Équipements','image'=>$r['image'],'stock'=>$r['stock_status']==='in_stock'?'En stock':($r['stock_status']==='on_order'?'Sur commande':'Rupture'),'price'=>$r['price']===null?null:(int)$r['price'],'promotional_price'=>isset($r['promotional_price'])&&$r['promotional_price']!==null?(int)$r['promotional_price']:null,'tone'=>'navy'], Database::connection()->query("SELECT * FROM products WHERE status='published' ORDER BY id DESC")->fetchAll()); } catch(\Throwable) {} return [
             ['slug'=>'pompe-carburant','title'=>'Pompe à carburant','stock'=>'En stock','price'=>null,'tone'=>'navy'],
             ['slug'=>'pistolet-distribution','title'=>'Pistolet de distribution','stock'=>'En stock','price'=>85000,'tone'=>'gold'],
             ['slug'=>'sabre-de-jauge','title'=>'Sabre de jauge','stock'=>'Sur commande','price'=>45000,'tone'=>'steel'],
@@ -79,10 +79,22 @@ final class SiteController
         ], 'site');
     }
     public function shop(): void { View::render('site/shop', ['title'=>'Boutique équipements','active'=>'shop','products'=>$this->products()], 'site'); }
-    public function product(): void { View::render('site/product', ['title'=>'Sabre de jauge','active'=>'shop'], 'site'); }
+    public function product(): void
+    {
+        $slug=trim((string)($_GET['slug']??''));$db=Database::connection();$stmt=$db->prepare("SELECT * FROM products WHERE slug=? AND status='published' LIMIT 1");$stmt->execute([$slug]);$product=$stmt->fetch();
+        if(!$product){http_response_code(404);View::render('errors/404',['title'=>'Produit introuvable']);return;}
+        $stmt=$db->prepare("SELECT * FROM products WHERE status='published' AND category=? AND id<>? ORDER BY id DESC LIMIT 4");$stmt->execute([$product['category']??'Équipements',(int)$product['id']]);
+        View::render('site/product',['title'=>$product['name'],'active'=>'shop','product'=>$product,'related'=>$stmt->fetchAll()],'site');
+    }
     public function cart(): void { View::render('site/cart', ['title'=>'Votre panier','active'=>'cart'], 'site'); }
     public function removeCart(): void { unset($_SESSION['cart'][$_POST['key'] ?? '']); $_SESSION['flash']='Article retiré du panier.'; $this->redirect('/panier'); }
     public function clearCart(): void { $_SESSION['cart']=[]; $_SESSION['flash']='Panier vidé.'; $this->redirect('/panier'); }
+    public function applyCoupon(): void
+    {
+        $code=strtoupper(trim((string)($_POST['code']??'')));unset($_SESSION['coupon']);$subtotal=$this->cartSubtotal();$stmt=Database::connection()->prepare("SELECT * FROM coupons WHERE code=? AND status='active' AND (starts_at IS NULL OR starts_at<=NOW()) AND (expires_at IS NULL OR expires_at>=NOW()) AND (usage_limit IS NULL OR used_count<usage_limit) LIMIT 1");$stmt->execute([$code]);$coupon=$stmt->fetch();
+        if(!$coupon||$subtotal<(float)$coupon['minimum_amount']){$_SESSION['flash']='Ce coupon est invalide, expiré ou son minimum d’achat n’est pas atteint.';$this->redirect('/panier');}
+        $_SESSION['coupon']=$coupon;$_SESSION['flash']='Coupon '.$code.' appliqué avec succès.';$this->redirect('/panier');
+    }
     public function checkout(): void
     {
         if (empty($_SESSION['cart'])) { $_SESSION['flash']='Votre panier est vide.'; $this->redirect('/panier'); }
@@ -91,18 +103,20 @@ final class SiteController
     public function placeOrder(): void
     {
         if (empty($_SESSION['cart'])) $this->redirect('/panier');
-        $hasProduct = isset($_SESSION['cart']['product']);
+        $hasProduct = (bool)array_filter($_SESSION['cart'],fn($item)=>($item['kind']??'')==='product');
         if (!$hasProduct) { $_POST['delivery']='pickup'; if(($_POST['payment']??'')==='delivery')$_POST['payment']='online'; }
         $required=['name','email','phone','payment','delivery']; foreach($required as $field) if(trim($_POST[$field]??'')===''){$_SESSION['checkout_error']='Veuillez remplir tous les champs obligatoires.';$this->redirect('/commande');}
+        if($hasProduct&&($_POST['delivery']??'')==='delivery'&&trim((string)($_POST['address']??''))===''){$_SESSION['checkout_error']='Indiquez l’adresse complète de livraison.';$this->redirect('/commande');}
         if(!filter_var($_POST['email'],FILTER_VALIDATE_EMAIL)){$_SESSION['checkout_error']='Adresse email invalide.';$this->redirect('/commande');}
-        $subtotal=array_sum(array_map(fn($i)=>$i['price']*$i['quantity'],$_SESSION['cart']));
+        $subtotal=$this->cartSubtotal();$coupon=$_SESSION['coupon']??null;$discount=$this->couponDiscount($coupon,$subtotal);$total=max(0,$subtotal-$discount);
         $db=Database::connection();$db->beginTransaction();try{
-            $reference='IF-'.date('Y').'-'.str_pad((string)((int)$db->query('SELECT COUNT(*)+1 FROM orders')->fetchColumn()),4,'0',STR_PAD_LEFT);$userId=$_SESSION['user']['id']??null;$status=$_POST['payment']==='delivery'?'pending':'paid';$paymentStatus=$_POST['payment']==='delivery'?'cod':'paid';$customer=['name'=>trim($_POST['name']),'email'=>trim($_POST['email']),'phone'=>trim($_POST['phone'])];
-            $stmt=$db->prepare('INSERT INTO orders(user_id,reference,status,payment_method,payment_status,delivery_method,subtotal,total,customer_data) VALUES(?,?,?,?,?,?,?,?,?)');$stmt->execute([$userId,$reference,$status,$_POST['payment'],$paymentStatus,$_POST['delivery'],$subtotal,$subtotal,json_encode($customer,JSON_UNESCAPED_UNICODE)]);$orderId=(int)$db->lastInsertId();$itemStmt=$db->prepare('INSERT INTO order_items(order_id,item_type,item_id,label,quantity,unit_price,total) VALUES(?,?,?,?,?,?,?)');
-            foreach($_SESSION['cart'] as $key=>$item){$itemId=$key==='training'?(int)($item['course_id']??0):0;$itemStmt->execute([$orderId,$key==='training'?'course':'product',$itemId,$item['name'],$item['quantity'],$item['price'],$item['price']*$item['quantity']]);if($key==='training'&&$userId&&$paymentStatus==='paid'&&$itemId){$db->prepare("INSERT INTO enrollments(user_id,course_id,status,source) VALUES(?,?,'active','purchase') ON DUPLICATE KEY UPDATE status='active'")->execute([$userId,$itemId]);}}
-            $db->commit();$order=['id'=>$orderId,'reference'=>$reference,'customer'=>$customer['name'],'email'=>$customer['email'],'payment'=>$_POST['payment'],'items'=>$_SESSION['cart'],'total'=>$subtotal,'status'=>$status,'created_at'=>date('c')];
+            $reference='IF-'.date('Y').'-'.str_pad((string)((int)$db->query('SELECT COUNT(*)+1 FROM orders')->fetchColumn()),4,'0',STR_PAD_LEFT);$userId=$_SESSION['user']['id']??null;$status=$_POST['payment']==='delivery'?'pending':'paid';$paymentStatus=$_POST['payment']==='delivery'?'cod':'paid';$customer=['name'=>trim($_POST['name']),'email'=>trim($_POST['email']),'phone'=>trim($_POST['phone']),'company'=>trim((string)($_POST['company']??'')),'address'=>trim((string)($_POST['address']??''))];
+            $stmt=$db->prepare('INSERT INTO orders(user_id,reference,status,payment_method,payment_status,delivery_method,subtotal,discount,total,coupon_code,customer_data) VALUES(?,?,?,?,?,?,?,?,?,?,?)');$stmt->execute([$userId,$reference,$status,$_POST['payment'],$paymentStatus,$_POST['delivery'],$subtotal,$discount,$total,$coupon['code']??null,json_encode($customer,JSON_UNESCAPED_UNICODE)]);$orderId=(int)$db->lastInsertId();$itemStmt=$db->prepare('INSERT INTO order_items(order_id,item_type,item_id,label,quantity,unit_price,total) VALUES(?,?,?,?,?,?,?)');
+            foreach($_SESSION['cart'] as $key=>$item){$itemId=($item['kind']??'')==='formation'?(int)($item['course_id']??0):(int)($item['product_id']??0);$itemType=($item['kind']??'')==='formation'?'course':'product';$itemStmt->execute([$orderId,$itemType,$itemId,$item['name'],$item['quantity'],$item['price'],$item['price']*$item['quantity']]);if($itemType==='product'&&$itemId)$db->prepare("UPDATE products SET stock_quantity=GREATEST(0,stock_quantity-?),stock_status=CASE WHEN stock_status='in_stock' AND stock_quantity<=0 THEN 'out_of_stock' ELSE stock_status END WHERE id=?")->execute([(int)$item['quantity'],$itemId]);if($itemType==='course'&&$userId&&$paymentStatus==='paid'&&$itemId){$db->prepare("INSERT INTO enrollments(user_id,course_id,status,source) VALUES(?,?,'active','purchase') ON DUPLICATE KEY UPDATE status='active'")->execute([$userId,$itemId]);}}
+            $db->prepare('INSERT INTO order_status_history(order_id,status,note) VALUES(?,?,?)')->execute([$orderId,$status,'Commande créée']);if($coupon)$db->prepare('UPDATE coupons SET used_count=used_count+1 WHERE id=?')->execute([(int)$coupon['id']]);
+            $db->commit();$order=['id'=>$orderId,'reference'=>$reference,'customer'=>$customer['name'],'email'=>$customer['email'],'payment'=>$_POST['payment'],'items'=>$_SESSION['cart'],'total'=>$total,'discount'=>$discount,'status'=>$status,'created_at'=>date('c')];
         }catch(\Throwable $e){if($db->inTransaction())$db->rollBack();$_SESSION['checkout_error']='La commande n’a pas pu être enregistrée.';$this->redirect('/commande');}
-        $_SESSION['last_order']=$order; $_SESSION['cart']=[]; $this->redirect('/commande/confirmation');
+        $_SESSION['last_order']=$order; $_SESSION['cart']=[]; unset($_SESSION['coupon']); $this->redirect('/commande/confirmation');
     }
     public function confirmation(): void { if(empty($_SESSION['last_order'])) $this->redirect('/'); View::render('site/confirmation',['title'=>'Commande confirmée','active'=>'cart','order'=>$_SESSION['last_order']],'site'); }
     public function account(): void { if(!empty($_SESSION['admin_authenticated'])&&empty($_SESSION['user'])) $this->redirect('/admin'); if(empty($_SESSION['user'])) $this->redirect('/connexion'); $stmt=Database::connection()->prepare("SELECT *, JSON_OBJECT() AS items FROM orders WHERE JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.email'))=? ORDER BY id DESC");$stmt->execute([$_SESSION['user']['email']]);$orders=$stmt->fetchAll();foreach($orders as &$o)$o['items']=array_fill(0,(int)(Database::connection()->query('SELECT COUNT(*) FROM order_items WHERE order_id='.(int)$o['id'])->fetchColumn()),1); View::render('site/account', ['title'=>'Mon espace IFMAP','active'=>'account','orders'=>$orders,'enrolled'=>$_SESSION['enrolled']??false,'user'=>$_SESSION['user']], 'site'); }
@@ -121,7 +135,7 @@ final class SiteController
     {
         $type = ($_POST['type'] ?? '') === 'product' ? 'product' : 'training';
         if ($type === 'product') {
-            $_SESSION['cart'][$type] = ['name' => 'Sabre de jauge', 'quantity' => max(1, (int) ($_POST['quantity'] ?? 1)), 'price' => 45000];
+            $productId=(int)($_POST['product_id']??0);$stmt=Database::connection()->prepare("SELECT id,name,price,promotional_price,image,stock_status,stock_quantity FROM products WHERE id=? AND status='published' LIMIT 1");$stmt->execute([$productId]);$product=$stmt->fetch();if(!$product||$product['stock_status']==='out_of_stock'){$_SESSION['flash']='Ce produit n’est plus disponible.';$this->redirect('/boutique');}$quantity=max(1,(int)($_POST['quantity']??1));if($product['stock_status']==='in_stock'&&(int)$product['stock_quantity']>0)$quantity=min($quantity,(int)$product['stock_quantity']);$price=$product['promotional_price']!==null?(int)$product['promotional_price']:(int)$product['price'];$key='product_'.$productId;$_SESSION['cart'][$key]=['name'=>$product['name'],'quantity'=>$quantity,'price'=>$price,'product_id'=>$productId,'kind'=>'product','image'=>$product['image']];
         } else {
             $courseId = (int) ($_POST['course_id'] ?? 0);
             $stmt = Database::connection()->prepare("SELECT title,price FROM courses WHERE id=? AND status='published' LIMIT 1");
@@ -136,6 +150,8 @@ final class SiteController
         $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
         header('Location: ' . $base . '/panier'); exit;
     }
+    private function cartSubtotal(): float { return array_sum(array_map(fn($i)=>(float)$i['price']*(int)$i['quantity'],$_SESSION['cart']??[])); }
+    private function couponDiscount(?array $coupon,float $subtotal): float { if(!$coupon)return 0;return min($subtotal,$coupon['type']==='percent'?$subtotal*min(100,(float)$coupon['value'])/100:(float)$coupon['value']); }
     public function news(): void
     {
         $db=Database::connection();

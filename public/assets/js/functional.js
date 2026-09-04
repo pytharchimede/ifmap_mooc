@@ -90,22 +90,6 @@ if (trainingCatalog) {
 }
 
 document
-  .querySelectorAll(".shop-section .filter-chips button")
-  .forEach((button, index) =>
-    button.addEventListener("click", () => {
-      button.parentElement
-        .querySelectorAll("button")
-        .forEach((item) => item.classList.toggle("active", item === button));
-      document
-        .querySelectorAll(".product-card")
-        .forEach(
-          (card, cardIndex) =>
-            (card.hidden = index > 0 && cardIndex % 4 !== index - 1),
-        );
-    }),
-  );
-
-document
   .querySelectorAll(".program-line")
   .forEach((line) =>
     line.addEventListener("click", () => line.classList.toggle("expanded")),

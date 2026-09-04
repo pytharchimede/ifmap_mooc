@@ -1,4 +1,4 @@
-<?php $courseTitle = htmlspecialchars($courseData['title']); ?>
+<?php $courseData=array_merge(['title'=>'Formation','category'=>'Formation','mode'=>'Présentiel','duration_label'=>'À définir','price'=>0,'tone'=>'navy','thumbnail'=>null,'description'=>''],$courseData??[]);$modules=$modules??[];$prerequisites=$prerequisites??[];$courseTitle = htmlspecialchars($courseData['title']); ?>
 <style>
 	.detail-photo { overflow: hidden; }
 	.detail-photo img { display: block; width: 100%; height: 100%; min-height: 370px; object-fit: cover; }
