@@ -50,7 +50,7 @@ final class AuthController
     public function activate(): void
     {
         $id=(int)($_SESSION['pending_activation']??0);$otp=trim((string)($_POST['otp']??''));$stmt=Database::connection()->prepare("SELECT * FROM users WHERE id=? AND otp_code=? AND otp_expires_at>=NOW() LIMIT 1");$stmt->execute([$id,$otp]);$user=$stmt->fetch();if(!$user){$_SESSION['auth_error']='Code incorrect ou expiré.';$this->redirect('/activation');}
-        Database::connection()->prepare("UPDATE users SET status='active',phone_verified_at=NOW(),otp_code=NULL,otp_expires_at=NULL WHERE id=?")->execute([$id]);Database::connection()->prepare("UPDATE enrollments SET status='active' WHERE user_id=? AND status='pending'")->execute([$id]);unset($_SESSION['pending_activation'],$_SESSION['otp_demo']);session_regenerate_id(true);$_SESSION['user']=$this->safe($user);$_SESSION['user']['status']='active';$this->redirect('/academie');
+        Database::connection()->prepare("UPDATE users SET status='active',phone_verified_at=NOW(),otp_code=NULL,otp_expires_at=NULL WHERE id=?")->execute([$id]);Database::connection()->prepare("UPDATE enrollments SET status='active' WHERE user_id=? AND status='pending'")->execute([$id]);unset($_SESSION['pending_activation'],$_SESSION['otp_demo']);session_regenerate_id(true);$_SESSION['user']=$this->safe($user);$_SESSION['user']['status']='active';$this->redirect($this->intended('/academie'));
     }
     public function resendOtp(): void
     {

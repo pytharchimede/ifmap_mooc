@@ -23,6 +23,10 @@ $router->get('/commande', [SiteController::class, 'checkout']);
 $router->post('/commande', [SiteController::class, 'placeOrder']);
 $router->get('/commande/confirmation', [SiteController::class, 'confirmation']);
 $router->get('/commande/telecharger', [SiteController::class, 'downloadProduct']);
+$router->get('/paiement/cinetpay/retour', [SiteController::class, 'cinetPayReturn']);
+$router->post('/paiement/cinetpay/retour', [SiteController::class, 'cinetPayReturn']);
+$router->get('/paiement/cinetpay/notification', [SiteController::class, 'cinetPayNotify']);
+$router->post('/paiement/cinetpay/notification', [SiteController::class, 'cinetPayNotify']);
 $router->get('/mon-compte', function (): void {
     $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
     header('Location: ' . $base . (!empty($_SESSION['user']) ? '/academie' : '/connexion')); exit;
