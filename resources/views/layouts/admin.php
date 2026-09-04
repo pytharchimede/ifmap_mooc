@@ -11,6 +11,7 @@ unset($_SESSION['flash']);
     <title><?= htmlspecialchars($title) ?> — Administration IFMAP</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/public/assets/css/app.css">
+    <link rel="stylesheet" href="/public/assets/css/admin-forms.css">
     <style>:root{--primary:<?= htmlspecialchars($brand['primary']) ?>;--accent:<?= htmlspecialchars($brand['accent']) ?>}</style>
 </head>
 <body class="admin-body">
