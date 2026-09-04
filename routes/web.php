@@ -22,6 +22,7 @@ $router->post('/panier/coupon', [SiteController::class, 'applyCoupon']);
 $router->get('/commande', [SiteController::class, 'checkout']);
 $router->post('/commande', [SiteController::class, 'placeOrder']);
 $router->get('/commande/confirmation', [SiteController::class, 'confirmation']);
+$router->get('/commande/telecharger', [SiteController::class, 'downloadProduct']);
 $router->get('/mon-compte', function (): void {
     $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
     header('Location: ' . $base . (!empty($_SESSION['user']) ? '/academie' : '/connexion')); exit;
