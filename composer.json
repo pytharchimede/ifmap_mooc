@@ -1,0 +1,5 @@
+{
+    "require": {
+        "cinetpay-dev/cinetpay-php": "^3.0"
+    }
+}
