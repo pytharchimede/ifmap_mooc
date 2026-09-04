@@ -6,6 +6,7 @@ use App\Core\Env;
 use App\Core\Store;
 use App\Core\Database;
 use App\Core\HtmlSanitizer;
+use App\Services\R2Storage;
 
 final class AdminController
 {
@@ -111,6 +112,10 @@ final class AdminController
         $this->redirect('/admin/cours/modifier?id=' . $id);
     }
     public function builder(): void { $this->guard();$id=(int)($_GET['course']??0);$db=Database::connection();$course=$db->query('SELECT * FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$modules=$db->query('SELECT * FROM modules WHERE course_id='.$id.' ORDER BY position,id')->fetchAll();foreach($modules as &$m){$m['lessons']=$db->query('SELECT * FROM lessons WHERE module_id='.(int)$m['id'].' ORDER BY position,id')->fetchAll();$m['assessments']=$db->query('SELECT * FROM assessments WHERE module_id='.(int)$m['id'])->fetchAll();}View::render('admin/builder',['title'=>'Programme du cours','active'=>'admin-courses','course'=>$course,'modules'=>$modules],'admin'); }
+    public function r2VideoUploadUrl(): void
+    {
+        $this->guard();header('Content-Type: application/json; charset=utf-8');$payload=json_decode((string)file_get_contents('php://input'),true)?:[];try{$courseId=(int)($payload['course_id']??0);if($courseId<1)throw new \InvalidArgumentException('Formation invalide.');$stmt=Database::connection()->prepare('SELECT 1 FROM courses WHERE id=?');$stmt->execute([$courseId]);if(!$stmt->fetchColumn())throw new \InvalidArgumentException('Formation introuvable.');$result=(new R2Storage())->createVideoUpload($courseId,(string)($payload['name']??'video'),(string)($payload['type']??''),(int)($payload['size']??0));echo json_encode(['ok'=>true]+$result,JSON_UNESCAPED_SLASHES);return;}catch(\Throwable $e){http_response_code(422);echo json_encode(['ok'=>false,'message'=>$e->getMessage()],JSON_UNESCAPED_UNICODE);}
+    }
     public function exams(): void { $this->guard();$id=(int)($_GET['course']??0);$db=Database::connection();$course=$db->query('SELECT id,title FROM courses WHERE id='.$id)->fetch();if(!$course)$this->redirect('/admin/cours');$assessments=$db->query("SELECT a.*,m.title module_title,(SELECT COUNT(*) FROM questions q WHERE q.assessment_id=a.id) question_count FROM assessments a LEFT JOIN modules m ON m.id=a.module_id WHERE a.course_id=$id ORDER BY a.type,a.id")->fetchAll();View::render('admin/exams',['title'=>'Compositions et examen final','active'=>'admin-courses','course'=>$course,'assessments'=>$assessments],'admin'); }
     public function builderAction(): void
     {

@@ -557,3 +557,16 @@ document.querySelectorAll("[data-news-form]").forEach((form) => {
   });
   url?.addEventListener("input", () => show(url.value));
 });
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('form.builder-form').forEach(form=>{
+    const action=form.querySelector('input[name="builder_action"]');
+    if(!action||action.value!=='lesson'||form.querySelector('[data-r2-video]'))return;
+    const textarea=form.querySelector('textarea[name="content"]');
+    const button=form.querySelector('button[type="submit"],button:not([type])');
+    const upload=document.createElement('label');upload.className='r2-video-upload';upload.innerHTML='<span>☁</span><strong>Envoyer la vidéo vers Cloudflare R2</strong><small>MP4, WebM ou MOV · jusqu’à 5 Go · envoi direct sans passer par l’hébergement</small><input type="file" accept="video/mp4,video/webm,video/quicktime" data-r2-video>';
+    const progress=document.createElement('div');progress.className='r2-progress';progress.hidden=true;progress.innerHTML='<i><b></b></i><span>Préparation…</span>';
+    textarea.after(upload,progress);const input=upload.querySelector('input'),bar=progress.querySelector('b'),label=progress.querySelector('span');
+    input.addEventListener('change',async()=>{const file=input.files[0];if(!file)return;progress.hidden=false;bar.style.width='2%';label.textContent='Création du lien sécurisé…';button.disabled=true;try{const response=await fetch('/admin/r2/video-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_id:form.querySelector('input[name="course_id"]').value,name:file.name,type:file.type,size:file.size})});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.message||'Configuration R2 indisponible.');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',data.upload_url);xhr.setRequestHeader('Content-Type',file.type);xhr.upload.onprogress=event=>{if(event.lengthComputable){const value=Math.round(event.loaded/event.total*100);bar.style.width=value+'%';label.textContent='Envoi vers R2 : '+value+'%';}};xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error('R2 a refusé le fichier ('+xhr.status+').'));xhr.onerror=()=>reject(new Error('Connexion interrompue pendant l’envoi.'));xhr.send(file);});textarea.value=data.content;bar.style.width='100%';label.textContent='✓ Vidéo sauvegardée sur R2. Vous pouvez ajouter la leçon.';}catch(error){bar.style.width='0';label.textContent=error.message;input.value='';}finally{button.disabled=false;}});
+    form.addEventListener('submit',event=>{if(button.disabled){event.preventDefault();label.textContent='Attendez la fin de l’envoi de la vidéo.';}});
+  });
+});

@@ -1,5 +1,6 @@
 {
     "require": {
-        "cinetpay-dev/cinetpay-php": "^3.0"
+        "cinetpay-dev/cinetpay-php": "^3.0",
+        "aws/aws-sdk-php": "^3.0"
     }
 }

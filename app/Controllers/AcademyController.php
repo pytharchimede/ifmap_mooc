@@ -2,6 +2,7 @@
 namespace App\Controllers;
 use App\Core\Database;
 use App\Core\View;
+use App\Services\R2Storage;
 
 final class AcademyController
 {
@@ -24,7 +25,7 @@ final class AcademyController
     }
     public function lesson(): void
     {
-        $user=$this->user();$id=(int)($_GET['id']??0);$db=Database::connection();$stmt=$db->prepare('SELECT l.*,m.course_id,m.title module_title,c.title course_title FROM lessons l JOIN modules m ON m.id=l.module_id JOIN courses c ON c.id=m.course_id WHERE l.id=?');$stmt->execute([$id]);$lesson=$stmt->fetch();if(!$lesson){http_response_code(404);return;}$access=$db->prepare('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=?');$access->execute([$user['id'],$lesson['course_id']]);if(!$access->fetchColumn()&&($user['role']??'')!=='admin'){http_response_code(403);return;}View::render('academy/lesson',['title'=>$lesson['title'],'active'=>'courses','lesson'=>$lesson],'app');
+        $user=$this->user();$id=(int)($_GET['id']??0);$db=Database::connection();$stmt=$db->prepare('SELECT l.*,m.course_id,m.title module_title,c.title course_title FROM lessons l JOIN modules m ON m.id=l.module_id JOIN courses c ON c.id=m.course_id WHERE l.id=?');$stmt->execute([$id]);$lesson=$stmt->fetch();if(!$lesson){http_response_code(404);return;}$access=$db->prepare('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=?');$access->execute([$user['id'],$lesson['course_id']]);if(!$access->fetchColumn()&&($user['role']??'')!=='admin'){http_response_code(403);return;}if($lesson['type']==='video'&&str_starts_with((string)$lesson['content'],'r2://')){try{$lesson['content']=(new R2Storage())->playbackUrl((string)$lesson['content']);}catch(\Throwable $e){error_log('Lecture R2 leçon '.$id.' : '.$e->getMessage());$lesson['content']='';}}View::render('academy/lesson',['title'=>$lesson['title'],'active'=>'courses','lesson'=>$lesson],'app');
     }
     public function completeLesson(): void
     {
