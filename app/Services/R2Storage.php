@@ -23,7 +23,7 @@ final class R2Storage
 
     private function client(): S3Client
     {
-        if(!$this->configured())throw new \RuntimeException('La configuration Cloudflare R2 est incomplète.');$account=(string)Env::get('R2_ACCOUNT_ID');return new S3Client(['version'=>'latest','region'=>'auto','endpoint'=>'https://'.$account.'.r2.cloudflarestorage.com','use_path_style_endpoint'=>true,'credentials'=>['key'=>(string)Env::get('R2_ACCESS_KEY_ID'),'secret'=>(string)Env::get('R2_SECRET_ACCESS_KEY')]]);
+        if(!$this->configured())throw new \RuntimeException('La configuration Cloudflare R2 est incomplète.');$account=(string)Env::get('R2_ACCOUNT_ID');return new S3Client(['version'=>'latest','region'=>'auto','endpoint'=>'https://'.$account.'.r2.cloudflarestorage.com','credentials'=>['key'=>(string)Env::get('R2_ACCESS_KEY_ID'),'secret'=>(string)Env::get('R2_SECRET_ACCESS_KEY')]]);
     }
     private function bucket(): string { return (string)Env::get('R2_BUCKET'); }
 }
