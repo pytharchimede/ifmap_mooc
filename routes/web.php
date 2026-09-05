@@ -7,6 +7,7 @@ use App\Controllers\AcademyController;
 use App\Controllers\ProfileController;
 
 $router->get('/', [SiteController::class, 'home']);
+$router->get('/favicon.ico', function (): void { header('Location: /public/favicon.svg', true, 302); });
 $router->get('/formations', [SiteController::class, 'trainings']);
 $router->get('/formations/{slug}', [SiteController::class, 'training']);
 $router->get('/boutique', [SiteController::class, 'shop']);
@@ -74,6 +75,7 @@ $router->post('/admin/cours/modifier', [AdminController::class, 'updateCourse'])
 $router->get('/admin/cours/programme', [AdminController::class, 'builder']);
 $router->post('/admin/cours/programme', [AdminController::class, 'builderAction']);
 $router->post('/admin/r2/video-url', [AdminController::class, 'r2VideoUploadUrl']);
+$router->get('/admin/cours/brouillons-lecons', [AdminController::class, 'lessonDrafts']);
 $router->get('/admin/cours/examens', [AdminController::class, 'exams']);
 $router->post('/admin/cours/supprimer', [AdminController::class, 'deleteCourse']);
 $router->get('/admin/produits', [AdminController::class, 'products']);

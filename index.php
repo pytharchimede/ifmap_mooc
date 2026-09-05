@@ -54,6 +54,7 @@ $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/builder-media.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/rich-editor.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/news.css"></head>', $html);
+$html = str_replace('</head>', '<link rel="icon" href="/public/favicon.svg" type="image/svg+xml"><link rel="alternate icon" href="/favicon.ico"></head>', $html);
 $html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(
