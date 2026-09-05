@@ -25,5 +25,10 @@ final class R2Storage
     {
         if(!$this->configured())throw new \RuntimeException('La configuration Cloudflare R2 est incomplète.');$account=(string)Env::get('R2_ACCOUNT_ID');return new S3Client(['version'=>'latest','region'=>'auto','endpoint'=>'https://'.$account.'.r2.cloudflarestorage.com','credentials'=>['key'=>(string)Env::get('R2_ACCESS_KEY_ID'),'secret'=>(string)Env::get('R2_SECRET_ACCESS_KEY')]]);
     }
-    private function bucket(): string { return (string)Env::get('R2_BUCKET'); }
+    private function bucket(): string
+    {
+        $bucket=trim((string)Env::get('R2_BUCKET','ifmap-mooc-videos'));
+        // Compatibilité avec l'ancien nom utilisé avant la création du bucket R2 réel.
+        return $bucket===''||$bucket==='ifmap-course-videos'?'ifmap-mooc-videos':$bucket;
+    }
 }
