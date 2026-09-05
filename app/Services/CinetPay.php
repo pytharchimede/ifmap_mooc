@@ -2,6 +2,10 @@
 namespace App\Services;
 
 use App\Core\Env;
+use CinetPay\Country;
+use CinetPay\Currency;
+use CinetPay\Language;
+use CinetPay\Request\CreatePaymentRequest;
 
 final class CinetPay
 {
@@ -10,14 +14,14 @@ final class CinetPay
 
     public function configured(): bool
     {
-        return trim((string)Env::get('CINETPAY_API_KEY'))!==''&&trim((string)Env::get('CINETPAY_SITE_ID'))!=='';
+        return trim((string)Env::get('CINETPAY_API_KEY'))!==''&&trim((string)Env::get('CINETPAY_API_PASSWORD'))!=='';
     }
 
     public function initialize(array $order,string $returnUrl,string $notifyUrl): array
     {
-        $path=parse_url($returnUrl,PHP_URL_PATH)?:'/paiement/cinetpay/retour';$base=substr($returnUrl,0,-strlen($path));
-        $transactionId=$this->transactionId($order);
-        return ['code'=>'201','message'=>'Guichet Seamless prêt','data'=>['payment_url'=>$base.'/paiement/cinetpay/guichet?order='.(int)$order['id'],'payment_token'=>$transactionId]];
+        $customer=json_decode((string)($order['customer_data']??'{}'),true)?:[];$names=preg_split('/\s+/',trim((string)($customer['name']??'')),2)?:[];$first=mb_substr(trim((string)($names[0]??'Client')),0,255);$last=mb_substr(trim((string)($names[1]??'IFMAP')),0,255);if(mb_strlen($first)<2)$first='Client';if(mb_strlen($last)<2)$last='IFMAP';
+        try{$payment=$this->client()->payments()->create(new CreatePaymentRequest(currency:Currency::XOF,merchantTransactionId:$this->transactionId($order),amount:(int)$order['total'],successUrl:$returnUrl,failedUrl:$returnUrl.'?payment=failed',notifyUrl:$notifyUrl,language:Language::French,designation:'Commande IFMAP '.$order['reference'],clientFirstName:$first,clientLastName:$last,clientEmail:(string)($customer['email']??'')));}catch(\CinetPay\Exception\AuthenticationException){throw new \RuntimeException('Les identifiants API REST Paiement sont refusés. Le mot de passe API Transfert ne peut pas être utilisé pour Checkout.');}
+        return ['code'=>(string)$payment->code,'message'=>$payment->status,'data'=>['payment_url'=>$payment->paymentUrl,'payment_token'=>$payment->transactionId,'notify_token'=>$payment->notifyToken,'merchant_transaction_id'=>$payment->merchantTransactionId]];
     }
 
     public function seamlessData(array $order,string $notifyUrl): array
@@ -35,7 +39,12 @@ final class CinetPay
 
     public function check(string $transactionId): array
     {
-        return $this->post(self::CHECK_URL,['apikey'=>(string)Env::get('CINETPAY_API_KEY'),'site_id'=>(string)Env::get('CINETPAY_SITE_ID'),'transaction_id'=>$transactionId]);
+        $payment=$this->client()->payments()->find($transactionId);return ['code'=>$payment->code,'data'=>$payment->raw+['status'=>$payment->status,'merchant_transaction_id'=>$payment->merchantTransactionId,'transaction_id'=>$payment->transactionId]];
+    }
+
+    private function client(): \CinetPay\CinetPay
+    {
+        $key=trim((string)Env::get('CINETPAY_API_KEY'));$password=(string)Env::get('CINETPAY_API_PASSWORD');if($key===''||$password==='')throw new \RuntimeException('La clé API ou le mot de passe API CinetPay manque dans le fichier .env.');$mode=strtoupper(trim((string)Env::get('CINETPAY_MODE','PRODUCTION')));return $mode==='TEST'?\CinetPay\CinetPay::sandbox($key,$password,Country::IvoryCoast):\CinetPay\CinetPay::production($key,$password,Country::IvoryCoast);
     }
 
     private function post(string $url,array $payload): array
