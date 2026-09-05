@@ -132,6 +132,10 @@ final class SiteController
         try{$this->verifyAndFinalizeCinetPay($transactionId);}catch(\Throwable $e){error_log('CinetPay notify: '.$e->getMessage());}
         http_response_code(200);echo 'OK';
     }
+    public function cinetPayCheckout(): void
+    {
+        $orderId=(int)($_GET['order']??0);$pendingId=(int)($_SESSION['pending_order_id']??0);if($orderId<1||$orderId!==$pendingId)$this->redirect('/commande');$db=Database::connection();$stmt=$db->prepare("SELECT * FROM orders WHERE id=? AND payment_status IN ('pending','failed')");$stmt->execute([$orderId]);$order=$stmt->fetch();if(!$order)$this->redirect('/commande/confirmation');$items=$db->prepare("SELECT oi.*,p.product_type FROM order_items oi LEFT JOIN products p ON oi.item_type='product' AND p.id=oi.item_id WHERE oi.order_id=? ORDER BY oi.id");$items->execute([$orderId]);$orderItems=$items->fetchAll();$_SESSION['cart']=array_map(fn($item)=>['kind'=>$item['item_type']==='course'?'formation':'product','course_id'=>$item['item_type']==='course'?(int)$item['item_id']:null,'product_id'=>$item['item_type']==='product'?(int)$item['item_id']:null,'product_type'=>$item['product_type']??null,'name'=>$item['label'],'quantity'=>(int)$item['quantity'],'price'=>(float)$item['unit_price']],$orderItems);$gateway=new CinetPay();$checkoutData=$gateway->seamlessData($order,$this->publicUrl('/paiement/cinetpay/notification'));View::render('site/cinetpay',['title'=>'Paiement sécurisé','active'=>'cart','order'=>$order,'items'=>$orderItems,'checkoutData'=>$checkoutData],'site');
+    }
     public function cinetPayReturn(): void
     {
         $transactionId=trim((string)($_REQUEST['merchant_transaction_id']??$_REQUEST['transaction_id']??$_REQUEST['cpm_trans_id']??''));$orderId=(int)($_SESSION['pending_order_id']??0);

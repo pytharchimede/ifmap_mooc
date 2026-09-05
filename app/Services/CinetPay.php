@@ -15,8 +15,15 @@ final class CinetPay
 
     public function initialize(array $order,string $returnUrl,string $notifyUrl): array
     {
+        $path=parse_url($returnUrl,PHP_URL_PATH)?:'/paiement/cinetpay/retour';$base=substr($returnUrl,0,-strlen($path));
+        return ['code'=>'201','message'=>'Guichet Seamless prêt','data'=>['payment_url'=>$base.'/paiement/cinetpay/guichet?order='.(int)$order['id'],'payment_token'=>'seamless-'.(int)$order['id']]];
+    }
+
+    public function seamlessData(array $order,string $notifyUrl): array
+    {
         $customer=json_decode((string)($order['customer_data']??'{}'),true)?:[];$names=preg_split('/\s+/',trim((string)($customer['name']??'')),2)?:[];
-        return $this->post(self::PAYMENT_URL,['apikey'=>(string)Env::get('CINETPAY_API_KEY'),'site_id'=>(string)Env::get('CINETPAY_SITE_ID'),'transaction_id'=>(string)$order['reference'],'amount'=>(int)$order['total'],'currency'=>'XOF','description'=>'Commande IFMAP '.$order['reference'],'return_url'=>$returnUrl,'notify_url'=>$notifyUrl,'channels'=>'ALL','lang'=>'FR','metadata'=>(string)$order['id'],'customer_id'=>(string)($order['user_id']??$order['id']),'customer_name'=>$names[0]??'Client','customer_surname'=>$names[1]??'IFMAP','customer_email'=>(string)($customer['email']??''),'customer_phone_number'=>(string)($customer['phone']??''),'customer_address'=>(string)($customer['address']??'Abidjan'),'customer_city'=>'Abidjan','customer_country'=>'CI','customer_state'=>'CI','customer_zip_code'=>'00225']);
+        $mode=strtoupper(trim((string)Env::get('CINETPAY_MODE','PRODUCTION')));if(!in_array($mode,['PRODUCTION','TEST'],true))$mode='PRODUCTION';
+        return ['apikey'=>(string)Env::get('CINETPAY_API_KEY'),'site_id'=>(string)Env::get('CINETPAY_SITE_ID'),'mode'=>$mode,'transaction_id'=>(string)$order['reference'],'amount'=>(int)$order['total'],'currency'=>'XOF','description'=>'Commande IFMAP '.$order['reference'],'notify_url'=>$notifyUrl,'channels'=>'ALL','customer_name'=>$names[0]??'Client','customer_surname'=>$names[1]??'IFMAP','customer_email'=>(string)($customer['email']??''),'customer_phone_number'=>(string)($customer['phone']??''),'customer_address'=>(string)($customer['address']??'Abidjan'),'customer_city'=>'Abidjan','customer_country'=>'CI','customer_state'=>'CI','customer_zip_code'=>'00225'];
     }
 
     public function check(string $transactionId): array

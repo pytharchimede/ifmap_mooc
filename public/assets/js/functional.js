@@ -107,6 +107,7 @@ document
 document
   .querySelectorAll('form[action$="/admin/cours/supprimer"]')
   .forEach((form) => {
+    if (form.closest(".course-more")) return;
     const id = form.querySelector("[name=id]")?.value;
     if (!id) return;
     const base = location.pathname.split("/admin/")[0];
