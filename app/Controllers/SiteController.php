@@ -2,7 +2,6 @@
 namespace App\Controllers;
 
 use App\Core\View;
-use App\Core\Store;
 use App\Core\Database;
 use App\Core\Env;
 use App\Services\CinetPay;
@@ -127,14 +126,10 @@ final class SiteController
     public function cinetPayNotify(): void
     {
         if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'){http_response_code(200);echo 'OK';return;}
-        $payload=$_POST;if(!$payload){$payload=json_decode((string)file_get_contents('php://input'),true)?:[];}$transactionId=trim((string)($payload['merchant_transaction_id']??$payload['cpm_trans_id']??$payload['transaction_id']??''));
+        $payload=$_POST;if(!$payload){$payload=json_decode((string)file_get_contents('php://input'),true)?:[];}$gateway=new CinetPay();$receivedToken=$_SERVER['HTTP_X_TOKEN']??null;if($receivedToken!==null&&!$gateway->validNotificationHmac($payload,(string)$receivedToken)){error_log('CinetPay notify: signature HMAC invalide.');http_response_code(200);echo 'OK';return;}$transactionId=trim((string)($payload['merchant_transaction_id']??$payload['cpm_trans_id']??$payload['transaction_id']??''));
         if($transactionId===''){http_response_code(200);echo 'OK';return;}
         try{$this->verifyAndFinalizeCinetPay($transactionId);}catch(\Throwable $e){error_log('CinetPay notify: '.$e->getMessage());}
         http_response_code(200);echo 'OK';
-    }
-    public function cinetPayCheckout(): void
-    {
-        $orderId=(int)($_GET['order']??0);$pendingId=(int)($_SESSION['pending_order_id']??0);if($orderId<1||$orderId!==$pendingId)$this->redirect('/commande');$db=Database::connection();$stmt=$db->prepare("SELECT * FROM orders WHERE id=? AND payment_status IN ('pending','failed')");$stmt->execute([$orderId]);$order=$stmt->fetch();if(!$order)$this->redirect('/commande/confirmation');$items=$db->prepare("SELECT oi.*,p.product_type FROM order_items oi LEFT JOIN products p ON oi.item_type='product' AND p.id=oi.item_id WHERE oi.order_id=? ORDER BY oi.id");$items->execute([$orderId]);$orderItems=$items->fetchAll();$_SESSION['cart']=array_map(fn($item)=>['kind'=>$item['item_type']==='course'?'formation':'product','course_id'=>$item['item_type']==='course'?(int)$item['item_id']:null,'product_id'=>$item['item_type']==='product'?(int)$item['item_id']:null,'product_type'=>$item['product_type']??null,'name'=>$item['label'],'quantity'=>(int)$item['quantity'],'price'=>(float)$item['unit_price']],$orderItems);$gateway=new CinetPay();$checkoutData=$gateway->seamlessData($order,$this->publicUrl('/paiement/cinetpay/notification'));View::render('site/cinetpay',['title'=>'Paiement sécurisé','active'=>'cart','order'=>$order,'items'=>$orderItems,'checkoutData'=>$checkoutData],'site');
     }
     public function cinetPayReturn(): void
     {
@@ -206,8 +201,8 @@ final class SiteController
     }
     private function verifyAndFinalizeCinetPay(string $transactionId): int
     {
-        $db=Database::connection();$stmt=$db->prepare("SELECT o.id,o.total,o.reference FROM orders o LEFT JOIN payments p ON p.order_id=o.id AND p.provider='cinetpay' WHERE o.reference=? OR p.provider_reference=? ORDER BY o.id DESC LIMIT 1");$stmt->execute([$transactionId,$transactionId]);$order=$stmt->fetch();if(!$order)throw new \RuntimeException('Transaction inconnue.');
-        $verification=(new CinetPay())->check($transactionId);$data=is_array($verification['data']??null)?$verification['data']:$verification;$status=strtoupper((string)($data['status']??''));$amountOk=!array_key_exists('amount',$data)||abs((float)$data['amount']-(float)$order['total'])<=0.001;$currencyOk=!array_key_exists('currency',$data)||strtoupper((string)$data['currency'])==='XOF';$referenceOk=!isset($data['merchant_transaction_id'])||(string)$data['merchant_transaction_id']===(string)$order['reference'];
+        $db=Database::connection();$stmt=$db->prepare("SELECT o.id,o.total,o.reference FROM orders o LEFT JOIN payments p ON p.order_id=o.id AND p.provider='cinetpay' WHERE o.reference=? OR p.provider_reference=? OR JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.data.merchant_transaction_id'))=? ORDER BY o.id DESC LIMIT 1");$stmt->execute([$transactionId,$transactionId,$transactionId]);$order=$stmt->fetch();if(!$order)throw new \RuntimeException('Transaction inconnue.');
+        $verification=(new CinetPay())->check($transactionId);$data=is_array($verification['data']??null)?$verification['data']:$verification;$status=strtoupper((string)($data['status']??''));$amountOk=!array_key_exists('amount',$data)||abs((float)$data['amount']-(float)$order['total'])<=0.001;$currencyOk=!array_key_exists('currency',$data)||strtoupper((string)$data['currency'])==='XOF';$referenceOk=!isset($data['merchant_transaction_id'])||in_array((string)$data['merchant_transaction_id'],[(string)$order['reference'],$transactionId],true);
         if(!in_array($status,['ACCEPTED','SUCCESS'],true)||!$amountOk||!$currencyOk||!$referenceOk){$db->prepare("UPDATE payments SET status='failed',payload=? WHERE order_id=? AND provider='cinetpay'")->execute([json_encode($verification,JSON_UNESCAPED_UNICODE),(int)$order['id']]);$db->prepare("UPDATE orders SET payment_status='failed' WHERE id=? AND payment_status<>'paid'")->execute([(int)$order['id']]);return (int)$order['id'];}
         $this->finalizePaidOrder((int)$order['id'],$verification);return (int)$order['id'];
     }

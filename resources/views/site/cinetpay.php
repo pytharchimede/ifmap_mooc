@@ -1,4 +1,4 @@
-<script src="https://cdn.cinetpay.com/seamless/main.js"></script>
+<script src="https://www.cinetpay.com/cdn/seamless_sdk/latest/cinetpay.<?= ($checkoutData['mode']??'PRODUCTION')==='TEST'?'sandbox':'prod' ?>.min.js"></script>
 <section class="payment-gateway"><div class="gateway-card"><div class="gateway-lock">⌁</div><p class="site-kicker">PAIEMENT MOBILE SÉCURISÉ</p><h1>Finalisez votre commande</h1><p>Le guichet CinetPay va s’ouvrir directement dans votre navigateur.</p><div class="gateway-order"><span>Commande <b><?= htmlspecialchars($order['reference']) ?></b></span><strong><?= number_format((float)$order['total'],0,',',' ') ?> FCFA</strong></div><div class="gateway-items"><?php foreach($items as $item): ?><span><?= (int)$item['quantity'] ?> × <?= htmlspecialchars($item['label']) ?></span><?php endforeach ?></div><button class="site-btn gold wide" type="button" data-open-cinetpay>Ouvrir le guichet CinetPay →</button><a class="gateway-back" href="/commande">← Revenir à ma commande</a><small data-payment-state>Votre panier reste conservé tant que le paiement n’est pas confirmé.</small></div></section>
 <script>
 window.addEventListener('DOMContentLoaded',function(){
@@ -7,13 +7,12 @@ window.addEventListener('DOMContentLoaded',function(){
   if(typeof CinetPay==='undefined'){state.textContent='Le guichet ne peut pas être chargé. Vérifiez votre connexion puis réessayez.';return;}
   button.disabled=true;button.textContent='Ouverture du guichet…';state.textContent='Connexion sécurisée à CinetPay…';
   try{
-   CinetPay.setConfig({apikey:data.apikey,site_id:data.site_id,notify_url:data.notify_url,mode:data.mode});
-   CinetPay.getCheckout(data);
-   CinetPay.waitResponse(function(response){
-   if(response.status==='ACCEPTED'){state.textContent='Paiement accepté. Vérification en cours…';location.href='/paiement/cinetpay/retour?transaction_id='+encodeURIComponent(data.transaction_id);}
-   else{button.disabled=false;button.textContent='Réessayer le paiement';state.textContent='Le paiement n’a pas été accepté. Votre panier est toujours conservé.';}
-   });
-   CinetPay.onError(function(error){button.disabled=false;button.textContent='Réessayer le paiement';state.textContent='CinetPay a refusé l’ouverture du guichet. '+((error&&error.message)||'Votre panier est conservé.');});
+   CinetPay.setConfig({apikey:data.apikey,site_id:data.site_id,notify_url:data.notify_url});
+   CinetPay.setSignatureData({amount:parseInt(data.amount,10),trans_id:data.transaction_id,currency:'CFA',designation:data.description,custom:data.transaction_id});
+   CinetPay.on('error',function(error){button.disabled=false;button.textContent='Réessayer le paiement';state.textContent='CinetPay a refusé l’ouverture du guichet. '+((error&&error.message)||'Votre panier est conservé.');});
+   CinetPay.on('paymentPending',function(){state.textContent='Paiement en cours de validation…';});
+   CinetPay.on('paymentSuccessfull',function(response){if(response&&response.cpm_result==='00'){state.textContent='Paiement accepté. Vérification en cours…';location.href='/paiement/cinetpay/retour?transaction_id='+encodeURIComponent(data.transaction_id);}else{button.disabled=false;button.textContent='Réessayer le paiement';state.textContent=(response&&response.cpm_error_message)||'Le paiement n’a pas été accepté.';}});
+   CinetPay.getSignature();
   }catch(error){button.disabled=false;button.textContent='Réessayer le paiement';state.textContent='Impossible d’ouvrir CinetPay : '+(error.message||'erreur JavaScript inconnue');}
  }
  button.addEventListener('click',openCheckout);
