@@ -164,6 +164,16 @@ document
     link.removeAttribute("target");
   });
 
+document.querySelectorAll(".admin-course-card, .training-card").forEach((card) => {
+  const cover = card.querySelector(".admin-course-cover, .training-image");
+  const heading = card.querySelector(".admin-course-copy h2, h2");
+  if (!cover || !heading || cover.querySelector(".course-cover-title")) return;
+  const title = document.createElement("strong");
+  title.className = "course-cover-title";
+  title.textContent = heading.textContent.trim();
+  cover.append(title);
+});
+
 document.querySelectorAll("form.builder-form").forEach((form) => {
   const action = form.querySelector("[name=builder_action]")?.value;
   if (action === "lesson") {
