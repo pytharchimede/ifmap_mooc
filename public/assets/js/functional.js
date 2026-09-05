@@ -121,7 +121,7 @@ document
     const preview = document.createElement("a");
     preview.className = "btn secondary";
     preview.textContent = "Voir le cours";
-    preview.href = `${base}/academie/formation?course=${id}`;
+    preview.href = `${base}/admin/cours/apercu?course=${id}`;
     preview.target = "_blank";
     const edit = document.createElement("a");
     edit.className = "btn secondary";
@@ -147,11 +147,21 @@ if (builderCourseId) {
     const preview = document.createElement("a");
     preview.className = "btn primary";
     preview.textContent = "Prévisualiser le cours";
-    preview.href = `${base}/academie/formation?course=${builderCourseId}`;
+    preview.href = `${base}/admin/cours/apercu?course=${builderCourseId}`;
     preview.target = "_blank";
     actions.append(exams, preview);
   }
 }
+
+document
+  .querySelectorAll('.admin-body a[href*="/academie/formation?course="]')
+  .forEach((link) => {
+    link.href = link.href.replace(
+      "/academie/formation?course=",
+      "/admin/cours/apercu?course=",
+    );
+    link.removeAttribute("target");
+  });
 
 document.querySelectorAll("form.builder-form").forEach((form) => {
   const action = form.querySelector("[name=builder_action]")?.value;

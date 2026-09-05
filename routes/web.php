@@ -73,6 +73,8 @@ $router->post('/admin/cours/nouveau', [AdminController::class, 'saveCourse']);
 $router->get('/admin/cours/modifier', [AdminController::class, 'editCourse']);
 $router->post('/admin/cours/modifier', [AdminController::class, 'updateCourse']);
 $router->get('/admin/cours/programme', [AdminController::class, 'builder']);
+$router->get('/admin/cours/apercu', [AdminController::class, 'previewCourse']);
+$router->get('/admin/cours/apercu-lecon', [AdminController::class, 'previewLesson']);
 $router->post('/admin/cours/programme', [AdminController::class, 'builderAction']);
 $router->post('/admin/r2/video-url', [AdminController::class, 'r2VideoUploadUrl']);
 $router->get('/admin/cours/brouillons-lecons', [AdminController::class, 'lessonDrafts']);

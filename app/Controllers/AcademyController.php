@@ -15,9 +15,11 @@ final class AcademyController
         if(!$enrollment&&($user['role']??'')!=='admin'){$_SESSION['flash']='Vous devez être inscrit à cette formation.';$this->redirect('/formations');}
         if(($user['role']??'')!=='admin'){$required=$db->query("SELECT prerequisite_course_id FROM course_prerequisites WHERE course_id=$courseId AND type='course'")->fetchAll(\PDO::FETCH_COLUMN);foreach($required as $requiredId){$check=$db->prepare('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=? AND completed_at IS NOT NULL');$check->execute([$user['id'],$requiredId]);if(!$check->fetchColumn()){$_SESSION['flash']='Une formation préalable doit être terminée avant d’accéder à ce cours.';$this->redirect('/mon-compte');}}}
         $modules=$db->query('SELECT * FROM modules WHERE course_id='.$courseId.' ORDER BY position,id')->fetchAll();
-        foreach($modules as &$module){$module['lessons']=$db->query('SELECT * FROM lessons WHERE module_id='.(int)$module['id'].' ORDER BY position,id')->fetchAll();$module['assessment']=$db->query("SELECT * FROM assessments WHERE module_id=".(int)$module['id']." AND status='published' LIMIT 1")->fetch()?:null;}
+        $done=$db->prepare('SELECT lp.lesson_id FROM lesson_progress lp JOIN lessons l ON l.id=lp.lesson_id JOIN modules m ON m.id=l.module_id WHERE lp.user_id=? AND m.course_id=?');$done->execute([(int)$user['id'],$courseId]);$completed=array_map('intval',$done->fetchAll(\PDO::FETCH_COLUMN));
+        foreach($modules as &$module){$module['lessons']=$db->query('SELECT * FROM lessons WHERE module_id='.(int)$module['id'].' ORDER BY position,id')->fetchAll();$module['assessment']=$db->query("SELECT * FROM assessments WHERE module_id=".(int)$module['id']." AND status='published' LIMIT 1")->fetch()?:null;}unset($module);
         $final=$db->query("SELECT * FROM assessments WHERE course_id=$courseId AND type='final_exam' AND status='published' LIMIT 1")->fetch()?:null;
-        View::render('academy/course',['title'=>$course['title'],'active'=>'courses','course'=>$course,'modules'=>$modules,'final'=>$final,'enrollment'=>$enrollment],'app');
+        $nextLesson=null;foreach($modules as $module){foreach($module['lessons'] as $candidate){if(!in_array((int)$candidate['id'],$completed,true)){$nextLesson=$candidate;break 2;}}}if(!$nextLesson){foreach($modules as $module){if(!empty($module['lessons'])){$nextLesson=$module['lessons'][0];break;}}}
+        View::render('academy/course',['title'=>$course['title'],'active'=>'courses','course'=>$course,'modules'=>$modules,'final'=>$final,'enrollment'=>$enrollment,'completedLessons'=>$completed,'nextLesson'=>$nextLesson],'app');
     }
     public function assessment(): void
     {
