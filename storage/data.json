@@ -1,0 +1,81 @@
+{
+    "courses": [
+        {
+            "id": "c1",
+            "slug": "sous-gerant-station-service",
+            "title": "Le Métier de Sous-Gérant en Station-Service",
+            "sector": "Aval pétrolier",
+            "mode": "Présentiel",
+            "duration": "4 jours",
+            "price": 75000,
+            "tone": "navy",
+            "status": "published"
+        },
+        {
+            "id": "c2",
+            "slug": "depotage-carburant",
+            "title": "Le Dépotage du Carburant en Station-Service",
+            "sector": "Aval pétrolier",
+            "mode": "En ligne",
+            "duration": "8 heures",
+            "price": 45000,
+            "tone": "gold",
+            "status": "published"
+        },
+        {
+            "id": "c3",
+            "slug": "graissage-lubrifiants",
+            "title": "Graissage et Vente des Lubrifiants",
+            "sector": "Aval pétrolier",
+            "mode": "Mixte",
+            "duration": "3 jours",
+            "price": 50000,
+            "tone": "green",
+            "status": "published"
+        }
+    ],
+    "products": [
+        {
+            "id": "p1",
+            "slug": "pompe-carburant",
+            "title": "Pompe à carburant",
+            "stock": "En stock",
+            "price": 0,
+            "tone": "navy"
+        },
+        {
+            "id": "p2",
+            "slug": "pistolet-distribution",
+            "title": "Pistolet de distribution",
+            "stock": "En stock",
+            "price": 85000,
+            "tone": "gold"
+        },
+        {
+            "id": "p3",
+            "slug": "sabre-de-jauge",
+            "title": "Sabre de jauge",
+            "stock": "Sur commande",
+            "price": 45000,
+            "tone": "steel"
+        },
+        {
+            "id": "p4",
+            "slug": "pate-kolor-kut",
+            "title": "Pâte Kolor Kut",
+            "stock": "En stock",
+            "price": 18000,
+            "tone": "coral"
+        }
+    ],
+    "orders": [],
+    "users": [
+        {
+            "id": "u1",
+            "name": "Aïcha D.",
+            "email": "aicha@ifmap.ci",
+            "role": "learner",
+            "status": "active"
+        }
+    ]
+}

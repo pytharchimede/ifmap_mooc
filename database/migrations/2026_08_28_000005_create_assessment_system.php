@@ -1,0 +1,8 @@
+<?php
+return function(PDO $db): void {
+    $db->exec("CREATE TABLE assessments (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, course_id BIGINT UNSIGNED, module_id BIGINT UNSIGNED NULL, title VARCHAR(190), type ENUM('section_quiz','final_exam') DEFAULT 'section_quiz', passing_score TINYINT UNSIGNED DEFAULT 70, attempts_allowed TINYINT UNSIGNED DEFAULT 3, status ENUM('draft','published') DEFAULT 'draft', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE, FOREIGN KEY(module_id) REFERENCES modules(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE questions (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, assessment_id BIGINT UNSIGNED, question TEXT, options JSON, correct_answer VARCHAR(255), points INT UNSIGNED DEFAULT 1, position INT DEFAULT 0, FOREIGN KEY(assessment_id) REFERENCES assessments(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE assessment_attempts (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, assessment_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, score TINYINT UNSIGNED, passed BOOLEAN DEFAULT FALSE, answers JSON, started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP NULL, FOREIGN KEY(assessment_id) REFERENCES assessments(id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_preview BOOLEAN DEFAULT FALSE");
+    $db->exec("ALTER TABLE certificates ADD COLUMN IF NOT EXISTS verification_code VARCHAR(64) UNIQUE NULL, ADD COLUMN IF NOT EXISTS final_score TINYINT UNSIGNED NULL");
+};
