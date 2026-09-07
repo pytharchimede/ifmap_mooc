@@ -5,12 +5,23 @@ use App\Controllers\SiteController;
 use App\Controllers\AuthController;
 use App\Controllers\AcademyController;
 use App\Controllers\ProfileController;
+use App\Core\Database;
 
 $router->get('/', [SiteController::class, 'home']);
-$router->get('/favicon.ico', function (): void { header('Location: /public/favicon.svg', true, 302); });
+$router->get('/favicon.ico', function (): void {
+    $favicon = null;
+    try {
+        $stmt = Database::connection()->prepare("SELECT `value` FROM settings WHERE `group`='branding' AND `key` IN ('favicon','logo') ORDER BY (`key`='favicon') DESC LIMIT 1");
+        $stmt->execute();
+        $favicon = $stmt->fetchColumn() ?: null;
+    } catch (\Throwable) {}
+    header('Location: ' . ($favicon ?: '/public/favicon.svg'), true, 302);
+});
 $router->get('/formations', [SiteController::class, 'trainings']);
 $router->get('/formations/{slug}', [SiteController::class, 'training']);
 $router->get('/boutique', [SiteController::class, 'shop']);
+$router->get('/entreprise', [SiteController::class, 'company']);
+$router->get('/contact', [SiteController::class, 'contact']);
 $router->get('/actualites', [SiteController::class, 'news']);
 $router->get('/actualites/{slug}', [SiteController::class, 'article']);
 $router->post('/actualites/commenter', [SiteController::class, 'commentArticle']);
@@ -105,12 +116,10 @@ $router->get('/admin/documents/commande', [AdminController::class, 'orderDocumen
 $router->get('/admin/documents/livraison', [AdminController::class, 'deliveryDocument']);
 $router->get('/admin/branding', [AdminController::class, 'branding']);
 $router->post('/admin/branding', [AdminController::class, 'saveBranding']);
-
 $router->get('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
 $router->get('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
 $router->post('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
 $router->post('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
-
 $router->post('/admin/commandes/action', [AdminController::class, 'orderAction']);
 $router->get('/conditions-generales', [SiteController::class, 'terms']);
 $router->get('/retours-remboursements', [SiteController::class, 'refundPolicy']);
