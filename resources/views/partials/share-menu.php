@@ -2,11 +2,13 @@
 $shareTitle = trim((string)($shareTitle ?? 'IFMAP'));
 $shareText = trim((string)($shareText ?? 'Découvrez cette page IFMAP.'));
 $shareCompact = !empty($shareCompact);
+$shareIconOnly = !empty($shareIconOnly);
+$shareUrl = trim((string)($shareUrl ?? ''));
 ?>
-<div class="share-menu" data-share-menu data-share-title="<?= htmlspecialchars($shareTitle, ENT_QUOTES, 'UTF-8') ?>" data-share-text="<?= htmlspecialchars($shareText, ENT_QUOTES, 'UTF-8') ?>">
-    <button class="share-menu-trigger <?= $shareCompact ? 'is-compact' : '' ?>" type="button" data-share-trigger aria-haspopup="dialog" aria-expanded="false">
+<div class="share-menu <?= $shareIconOnly ? 'is-icon-only' : '' ?>" data-share-menu data-share-title="<?= htmlspecialchars($shareTitle, ENT_QUOTES, 'UTF-8') ?>" data-share-text="<?= htmlspecialchars($shareText, ENT_QUOTES, 'UTF-8') ?>"<?php if($shareUrl!==''): ?> data-share-url="<?= htmlspecialchars($shareUrl, ENT_QUOTES, 'UTF-8') ?>"<?php endif ?>>
+    <button class="share-menu-trigger <?= $shareCompact ? 'is-compact' : '' ?> <?= $shareIconOnly ? 'is-icon-only' : '' ?>" type="button" data-share-trigger aria-haspopup="dialog" aria-expanded="false" aria-label="Partager">
         <span class="share-menu-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 1 0-2.83-4A3 3 0 0 0 18 8ZM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.62 10.48l6.76-3.96M8.62 13.52l6.76 3.96" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span class="share-menu-trigger-copy"><strong>Partager</strong><?php if(!$shareCompact): ?><small>Choisir un canal</small><?php endif ?></span>
+        <?php if(!$shareIconOnly): ?><span class="share-menu-trigger-copy"><strong>Partager</strong><?php if(!$shareCompact): ?><small>Choisir un canal</small><?php endif ?></span><?php endif ?>
     </button>
     <div class="share-menu-popover" data-share-popover role="dialog" aria-label="Partager cette page" hidden>
         <div class="share-menu-head"><div><small>PARTAGER</small><strong>Choisissez votre canal</strong></div><button type="button" data-share-close aria-label="Fermer">×</button></div>
