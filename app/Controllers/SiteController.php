@@ -48,6 +48,8 @@ final class SiteController
     }
 
     public function home(): void { View::render('site/home', ['title'=>'Accueil','active'=>'home'], 'site'); }
+    public function contact(): void { View::render('site/contact', ['title'=>'Contact','active'=>'contact'], 'site'); }
+    public function company(): void { View::render('site/company', ['title'=>'Solutions entreprises','active'=>'company'], 'site'); }
     public function trainings(): void { View::render('site/trainings', ['title'=>'Nos formations','active'=>'trainings','trainings'=>$this->trainingData()], 'site'); }
     public function training(): void
     {
@@ -156,169 +158,74 @@ final class SiteController
         $payload = $_POST ?: (json_decode((string) file_get_contents('php://input'), true) ?: $_GET);
         if (!is_array($payload) || !is_string($payload['referenceNumber'] ?? null)) { http_response_code(400); return; }
         $db = Database::connection();
-        $stmt = $db->prepare("SELECT o.*,p.payload payment_payload FROM orders o JOIN payments p ON p.order_id=o.id AND p.provider='paiementpro' WHERE o.reference=? LIMIT 1");
-        $stmt->execute([$payload['referenceNumber']]);
+        $stmt = $db->prepare("SELECT o.*,p.payload payment_payload FROM orders o JOIN payments p ON p.order_id=o.id AND p.provider='paiementpro' WHERE p.provider_reference=? LIMIT 1");
+        $stmt->execute([(string)$payload['referenceNumber']]);
         $order = $stmt->fetch();
-        $metadata = $order ? (json_decode($order['payment_payload'], true) ?: []) : [];
-        $token = is_string($_GET['token'] ?? null) ? $_GET['token'] : '';
-        if (!$order || !(new PaiementPro())->validNotification($payload, $order, $token, $metadata['notification_token_hash'] ?? '')) {
-            http_response_code(403); return;
-        }
+        if (!$order) { http_response_code(404); return; }
+        $saved = json_decode((string)($order['payment_payload']??''),true)?:[];$provided=(string)($_GET['token']??'');$expected=(string)($saved['notification_token_hash']??'');if($provided===''||$expected===''||!hash_equals($expected,hash('sha256',$provided))){http_response_code(403);return;}
         try {
-            if ((string) $payload['responsecode'] === '0') {
-                $this->finalizePaidOrder((int) $order['id'], ['notification' => array_intersect_key($payload, array_flip(['merchantId','referenceNumber','countryCurrencyCode','amount','responsecode','transactiondt','transactionId','transactionReference','customerPhoneNumber','channel']))], 'paiementpro');
-            } else {
-                $db->prepare("UPDATE orders SET payment_status='failed' WHERE id=? AND payment_status NOT IN ('paid','refunded')")->execute([$order['id']]);
-                $db->prepare("UPDATE payments SET status='failed' WHERE order_id=? AND provider='paiementpro' AND status IN ('initiated','pending')")->execute([$order['id']]);
-            }
-            echo 'OK';
-        } catch (\Throwable $e) {
-            error_log('Paiement Pro notification: '.$e->getMessage());
-            http_response_code(500);
-        }
+            $response=(new PaiementPro())->status((string)$payload['referenceNumber']);
+            $this->finalizePaiementProOrder((int)$order['id'],$response);
+            http_response_code(200);
+        } catch (\Throwable $e) { error_log('Paiement Pro notification: '.$e->getMessage()); http_response_code(500); }
     }
-
     public function paiementProReturn(): void
     {
-        // Browser parameters are untrusted. Only display the session's own order.
-        $orderId = (int) ($_SESSION['pending_order_id'] ?? 0);
-        if (!$orderId) { $_SESSION['flash'] = 'Votre paiement est en cours de vérification.'; $this->redirect('/boutique'); }
-        $order = $this->orderForConfirmation($orderId);
-        $_SESSION['last_order'] = $order;
-        if (($order['payment_status'] ?? '') !== 'paid') {
-            $_SESSION['payment_error'] = 'Le paiement n’est pas encore confirmé. Actualisez cette page dans quelques instants.';
-        }
-        $this->redirect('/commande/confirmation');
+        $reference=trim((string)($_GET['referenceNumber']??$_POST['referenceNumber']??''));$orderId=(int)($_SESSION['pending_order_id']??0);if($reference!==''&&$orderId){try{$this->finalizePaiementProOrder($orderId,(new PaiementPro())->status($reference));}catch(\Throwable $e){error_log('Paiement Pro retour: '.$e->getMessage());}}
+        unset($_SESSION['pending_order_id']);$_SESSION['last_order']=$orderId?$this->orderForConfirmation($orderId):($_SESSION['last_order']??null);$this->redirect('/commande/confirmation');
     }
-
-    public function cinetPayNotify(): void
+    private function finalizePaiementProOrder(int $orderId,array $response): void
     {
-        if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'){http_response_code(200);echo 'OK';return;}
-        $payload=$_POST;if(!$payload){$payload=json_decode((string)file_get_contents('php://input'),true)?:[];}$gateway=new CinetPay();$receivedToken=$_SERVER['HTTP_X_TOKEN']??null;if($receivedToken!==null&&!$gateway->validNotificationHmac($payload,(string)$receivedToken)){error_log('CinetPay notify: signature HMAC invalide.');http_response_code(200);echo 'OK';return;}$transactionId=trim((string)($payload['merchant_transaction_id']??$payload['cpm_trans_id']??$payload['transaction_id']??''));
-        if($transactionId===''){http_response_code(200);echo 'OK';return;}
-        try{$this->verifyAndFinalizeCinetPay($transactionId);}catch(\Throwable $e){error_log('CinetPay notify: '.$e->getMessage());}
-        http_response_code(200);echo 'OK';
+        $code=(int)($response['code']??-1);$state=$code===0?'ACCEPTED':($code===1002||$code===1006?'REFUSED':'PENDING');$mapped=['data'=>['status'=>$state,'amount'=>$response['amount']??null,'currency'=>'XOF','operator_id'=>$response['referenceNumber']??null,'payment_method'=>$response['paymentType']??'Paiement Pro','payer_phone'=>$response['mobile']??null]];$this->finalizePaidOrder($orderId,$mapped,'paiementpro');
+        if($state!=='ACCEPTED'){Database::connection()->prepare("UPDATE payments SET status=?,payload=? WHERE order_id=? AND provider='paiementpro'")->execute([$state==='REFUSED'?'failed':'pending',json_encode($response,JSON_UNESCAPED_UNICODE),$orderId]);}
     }
-    public function cinetPayReturn(): void
-    {
-        $transactionId=trim((string)($_REQUEST['merchant_transaction_id']??$_REQUEST['transaction_id']??$_REQUEST['cpm_trans_id']??''));$orderId=(int)($_SESSION['pending_order_id']??0);
-        try{if($transactionId!=='')$orderId=$this->verifyAndFinalizeCinetPay($transactionId);elseif($orderId){$stmt=Database::connection()->prepare('SELECT reference FROM orders WHERE id=?');$stmt->execute([$orderId]);$reference=(string)$stmt->fetchColumn();if($reference!=='')$orderId=$this->verifyAndFinalizeCinetPay($reference);}}catch(\Throwable $e){error_log('CinetPay return: '.$e->getMessage());}
-        if(!$orderId){$_SESSION['flash']='Impossible de retrouver cette transaction.';$this->redirect('/boutique');}
-        $order=$this->orderForConfirmation($orderId);$_SESSION['last_order']=$order;unset($_SESSION['pending_order_id']);
-        if(($order['payment_status']??'')!=='paid')$_SESSION['payment_error']='Le paiement n’est pas encore confirmé. Aucun débit de stock ni accès numérique n’a été effectué.';
-        $this->redirect('/commande/confirmation');
-    }
-    public function confirmation(): void
-    {
-        if (empty($_SESSION['last_order'])) $this->redirect('/');
-        $order = $this->orderForConfirmation((int) $_SESSION['last_order']['id']);
-        $_SESSION['last_order'] = $order;
-        $error = in_array($order['payment_status'] ?? '', ['pending','failed'], true)
-            ? 'Le paiement n’est pas encore confirmé. Actualisez cette page dans quelques instants.' : null;
-        unset($_SESSION['payment_error']);
-        View::render('site/confirmation', ['title'=>$error?'Paiement non confirmé':'Commande confirmée','active'=>'cart','order'=>$order,'paymentError'=>$error], 'site');
-    }
-    public function downloadProduct(): void
-    {
-        $token=(string)($_GET['token']??'');if(!preg_match('/^[a-f0-9]{64}$/',$token)){http_response_code(404);return;}$db=Database::connection();$stmt=$db->prepare("SELECT dd.*,p.name,p.digital_file,o.payment_status,o.status FROM digital_downloads dd JOIN products p ON p.id=dd.product_id JOIN orders o ON o.id=dd.order_id WHERE dd.token_hash=? LIMIT 1");$stmt->execute([hash('sha256',$token)]);$download=$stmt->fetch();if(!$download||$download['payment_status']!=='paid'||$download['status']==='cancelled'||$download['download_count']>=$download['download_limit']||($download['expires_at']&&strtotime($download['expires_at'])<time())){http_response_code(403);echo 'Ce lien de téléchargement est invalide, expiré ou sa limite a été atteinte.';return;}$path=dirname(__DIR__,2).'/'.ltrim((string)$download['digital_file'],'/');if(!is_file($path)){http_response_code(404);echo 'Fichier indisponible.';return;}$db->prepare('UPDATE digital_downloads SET download_count=download_count+1,last_downloaded_at=NOW() WHERE id=?')->execute([(int)$download['id']]);$extension=pathinfo($path,PATHINFO_EXTENSION);$filename=preg_replace('/[^a-z0-9_-]+/i','-',iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$download['name'])?:'livre').'.'.$extension;header('Content-Type: application/octet-stream');header('Content-Disposition: attachment; filename="'.$filename.'"');header('Content-Length: '.filesize($path));header('X-Content-Type-Options: nosniff');readfile($path);exit;
-    }
-    public function account(): void { if(!empty($_SESSION['admin_authenticated'])&&empty($_SESSION['user'])) $this->redirect('/admin'); if(empty($_SESSION['user'])) $this->redirect('/connexion'); $stmt=Database::connection()->prepare("SELECT *, JSON_OBJECT() AS items FROM orders WHERE JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.email'))=? ORDER BY id DESC");$stmt->execute([$_SESSION['user']['email']]);$orders=$stmt->fetchAll();foreach($orders as &$o)$o['items']=array_fill(0,(int)(Database::connection()->query('SELECT COUNT(*) FROM order_items WHERE order_id='.(int)$o['id'])->fetchColumn()),1); View::render('site/account', ['title'=>'Mon espace IFMAP','active'=>'account','orders'=>$orders,'enrolled'=>$_SESSION['enrolled']??false,'user'=>$_SESSION['user']], 'site'); }
-    public function profile(): void { if(empty($_SESSION['user']))$this->redirect('/connexion');$stmt=Database::connection()->prepare('SELECT id,name,email,phone,avatar,role FROM users WHERE id=?');$stmt->execute([$_SESSION['user']['id']]);$user=$stmt->fetch()?:$_SESSION['user'];View::render('site/profile',['title'=>'Mon profil','active'=>'account','user'=>$user,'flash'=>$_SESSION['profile_flash']??null,'error'=>$_SESSION['profile_error']??null],'site');unset($_SESSION['profile_flash'],$_SESSION['profile_error']); }
-    public function saveProfile(): void
-    {
-        if(empty($_SESSION['user']))$this->redirect('/connexion');$name=trim($_POST['name']??'');$phone=trim($_POST['phone']??'');if($name===''){$_SESSION['profile_error']='Le nom est obligatoire.';$this->redirect('/profil');}$avatar=$_SESSION['user']['avatar']??null;
-        if(!empty($_FILES['avatar']['tmp_name'])&&is_uploaded_file($_FILES['avatar']['tmp_name'])){$allowed=['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($_FILES['avatar']['tmp_name']);if(!isset($allowed[$mime])||(int)$_FILES['avatar']['size']>5*1024*1024){$_SESSION['profile_error']='Photo invalide. Utilisez JPG, PNG ou WebP, 5 Mo maximum.';$this->redirect('/profil');}$dir=dirname(__DIR__,2).'/public/uploads/avatars';if(!is_dir($dir)&&!mkdir($dir,0775,true)&&!is_dir($dir)){$_SESSION['profile_error']='Impossible de créer le dossier des avatars.';$this->redirect('/profil');}$filename='avatar-'.(int)$_SESSION['user']['id'].'-'.bin2hex(random_bytes(5)).'.'.$allowed[$mime];if(!move_uploaded_file($_FILES['avatar']['tmp_name'],$dir.'/'.$filename)){$_SESSION['profile_error']='Impossible d’enregistrer la photo.';$this->redirect('/profil');}$avatar='/public/uploads/avatars/'.$filename;}
-        $stmt=Database::connection()->prepare('UPDATE users SET name=?,phone=?,avatar=? WHERE id=?');$stmt->execute([$name,$phone,$avatar,$_SESSION['user']['id']]);$_SESSION['user']['name']=$name;$_SESSION['user']['phone']=$phone;$_SESSION['user']['avatar']=$avatar;$_SESSION['profile_flash']='Profil mis à jour.';$this->redirect('/profil');
-    }
-    public function savePassword(): void
-    {
-        if(empty($_SESSION['user']))$this->redirect('/connexion');$current=(string)($_POST['current_password']??'');$password=(string)($_POST['password']??'');$confirmation=(string)($_POST['password_confirmation']??'');$stmt=Database::connection()->prepare('SELECT password FROM users WHERE id=?');$stmt->execute([$_SESSION['user']['id']]);$hash=$stmt->fetchColumn();if(!$hash||!password_verify($current,$hash)){$_SESSION['profile_error']='Le mot de passe actuel est incorrect.';$this->redirect('/academie#profil');}if(strlen($password)<8||$password!==$confirmation){$_SESSION['profile_error']='Le nouveau mot de passe doit contenir 8 caractères minimum et les deux saisies doivent correspondre.';$this->redirect('/academie#profil');}$stmt=Database::connection()->prepare('UPDATE users SET password=? WHERE id=?');$stmt->execute([password_hash($password,PASSWORD_DEFAULT),$_SESSION['user']['id']]);$_SESSION['profile_flash']='Mot de passe modifié avec succès.';$this->redirect('/academie#profil');
-    }
+    public function cinetPayNotify(): void { http_response_code(410); }
+    public function cinetPayReturn(): void { $_SESSION['checkout_error']='Le connecteur CinetPay a été désactivé au profit de Paiement Pro.';$this->redirect('/commande'); }
     public function addCart(): void
     {
-        $type = ($_POST['type'] ?? '') === 'product' ? 'product' : 'training';
-        if ($type === 'product') {
-            $productId=(int)($_POST['product_id']??0);$stmt=Database::connection()->prepare("SELECT id,name,price,promotional_price,image,stock_status,stock_quantity,product_type,digital_file,download_limit FROM products WHERE id=? AND status='published' LIMIT 1");$stmt->execute([$productId]);$product=$stmt->fetch();$digital=($product['product_type']??'physical')==='digital';if(!$product||(!$digital&&$product['stock_status']==='out_of_stock')||($digital&&empty($product['digital_file']))){$_SESSION['flash']='Ce produit n’est plus disponible.';$this->redirect('/boutique');}$quantity=$digital?1:max(1,(int)($_POST['quantity']??1));if(!$digital&&$product['stock_status']==='in_stock'&&(int)$product['stock_quantity']>0)$quantity=min($quantity,(int)$product['stock_quantity']);$price=$product['promotional_price']!==null?(int)$product['promotional_price']:(int)$product['price'];$key='product_'.$productId;$_SESSION['cart'][$key]=['name'=>$product['name'],'quantity'=>$quantity,'price'=>$price,'product_id'=>$productId,'kind'=>'product','product_type'=>$product['product_type'],'download_limit'=>(int)$product['download_limit'],'image'=>$product['image']];
+        $kind = ($_POST['kind'] ?? '') === 'product' ? 'product' : 'formation';
+        if ($kind === 'formation') {
+            $id=(int)($_POST['course_id']??0);$stmt=Database::connection()->prepare("SELECT id,title,price FROM courses WHERE id=? AND status='published'");$stmt->execute([$id]);$course=$stmt->fetch();if(!$course){$_SESSION['flash']='Formation introuvable.';$this->redirect('/formations');}
+            $item=['kind'=>'formation','course_id'=>(int)$course['id'],'name'=>$course['title'],'price'=>(int)$course['price'],'quantity'=>1];$key='formation-'.$course['id'];
         } else {
-            $courseId = (int) ($_POST['course_id'] ?? 0);
-            $stmt = Database::connection()->prepare("SELECT title,price FROM courses WHERE id=? AND status='published' LIMIT 1");
-            $stmt->execute([$courseId]);
-            $course = $stmt->fetch();
-            if (!$course) {
-                $_SESSION['flash'] = 'Cette formation n’est plus disponible.';
-                $this->redirect('/formations');
-            }
-            if (!empty($_SESSION['user']['id'])) {
-                $paid = Database::connection()->prepare("SELECT 1 FROM enrollments WHERE user_id=? AND course_id=? AND payment_status IN ('paid','free') AND status IN ('active','completed')");
-                $paid->execute([$_SESSION['user']['id'],$courseId]);
-                if ($paid->fetchColumn()) { $_SESSION['flash']='Cette formation est déjà payée ou accessible dans votre espace.'; $this->redirect('/academie/formation?course='.$courseId); }
-            }
-            $_SESSION['cart'][$type] = ['name' => $course['title'], 'quantity' => 1, 'price' => (int) $course['price'], 'course_id' => $courseId, 'kind' => 'formation'];
+            $id=(int)($_POST['product_id']??0);$stmt=Database::connection()->prepare("SELECT id,name,price,promotional_price,product_type,stock_status,stock_quantity FROM products WHERE id=? AND status='published'");$stmt->execute([$id]);$product=$stmt->fetch();if(!$product){$_SESSION['flash']='Produit introuvable.';$this->redirect('/boutique');}if(($product['product_type']??'physical')==='physical'&&(($product['stock_status']??'out_of_stock')==='out_of_stock'||(int)$product['stock_quantity']<1)){$_SESSION['flash']='Ce produit est en rupture de stock.';$this->redirect('/boutique');}$price=$product['promotional_price']!==null?(float)$product['promotional_price']:(float)$product['price'];$quantity=max(1,min(99,(int)($_POST['quantity']??1)));if(($product['product_type']??'physical')==='physical')$quantity=min($quantity,(int)$product['stock_quantity']);$item=['kind'=>'product','product_id'=>(int)$product['id'],'product_type'=>$product['product_type']??'physical','name'=>$product['name'],'price'=>$price,'quantity'=>$quantity];$key='product-'.$product['id'];
         }
-        $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
-        header('Location: ' . $base . '/panier'); exit;
+        $_SESSION['cart'] ??= [];$_SESSION['cart'][$key]=$item;$_SESSION['flash']='Article ajouté au panier.';$this->redirect('/panier');
     }
-    private function cartSubtotal(): float { return array_sum(array_map(fn($i)=>(float)$i['price']*(int)$i['quantity'],$_SESSION['cart']??[])); }
-    private function couponDiscount(?array $coupon,float $subtotal): float { if(!$coupon)return 0;return min($subtotal,$coupon['type']==='percent'?$subtotal*min(100,(float)$coupon['value'])/100:(float)$coupon['value']); }
+    public function confirmation(): void { $order=$_SESSION['last_order']??null;View::render('site/confirmation',['title'=>'Confirmation de commande','active'=>'cart','order'=>$order],'site'); }
+    public function downloadProduct(): void
+    {
+        $token=(string)($_GET['token']??'');if($token===''){http_response_code(404);return;}$db=Database::connection();$stmt=$db->prepare("SELECT od.*,p.digital_file,p.name FROM order_downloads od JOIN products p ON p.id=od.product_id JOIN orders o ON o.id=od.order_id WHERE od.token_hash=? AND od.expires_at>NOW() AND od.download_count<od.max_downloads AND o.payment_status='paid' LIMIT 1");$stmt->execute([hash('sha256',$token)]);$row=$stmt->fetch();if(!$row){http_response_code(403);echo 'Lien invalide, expiré ou limite de téléchargement atteinte.';return;}$file=dirname(__DIR__,2).'/'.ltrim((string)$row['digital_file'],'/');if(!is_file($file)){http_response_code(404);return;}$db->prepare('UPDATE order_downloads SET download_count=download_count+1,last_downloaded_at=NOW() WHERE id=?')->execute([(int)$row['id']]);$filename=preg_replace('/[^A-Za-z0-9._-]+/','-',basename($file));header('Content-Type: application/octet-stream');header('Content-Length: '.filesize($file));header('Content-Disposition: attachment; filename="'.$filename.'"');header('X-Content-Type-Options: nosniff');readfile($file);exit;
+    }
     public function news(): void
     {
-        $db=Database::connection();
-        $posts=$db->query("SELECT p.*,u.name author_name,(SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id=p.id AND pc.status='approved') comment_count FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.status='published' AND (p.published_at IS NULL OR p.published_at<=NOW()) ORDER BY COALESCE(p.published_at,p.created_at) DESC")->fetchAll();
-        View::render('site/news',['title'=>'Actualités','active'=>'news','posts'=>$posts],'site');
+        $db=Database::connection();$posts=$db->query("SELECT p.*,u.name author_name,(SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id=p.id AND pc.status='approved') comment_count FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.status='published' ORDER BY p.published_at DESC,p.id DESC")->fetchAll();View::render('site/news',['title'=>'Actualités','active'=>'news','posts'=>$posts],'site');
     }
     public function article(): void
     {
-        $slug=trim((string)($_GET['slug']??''));$db=Database::connection();
-        $stmt=$db->prepare("SELECT p.*,u.name author_name FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.slug=? AND p.status='published' AND (p.published_at IS NULL OR p.published_at<=NOW()) LIMIT 1");$stmt->execute([$slug]);$post=$stmt->fetch();
-        if(!$post){http_response_code(404);View::render('errors/404',['title'=>'Article introuvable']);return;}
-        $stmt=$db->prepare("SELECT pc.*,u.avatar FROM post_comments pc LEFT JOIN users u ON u.id=pc.user_id WHERE pc.post_id=? AND pc.status='approved' ORDER BY pc.created_at ASC");$stmt->execute([(int)$post['id']]);
-        View::render('site/article',['title'=>$post['title'],'active'=>'news','post'=>$post,'comments'=>$stmt->fetchAll()],'site');
+        $slug=trim((string)($_GET['slug']??''));$db=Database::connection();$stmt=$db->prepare("SELECT p.*,u.name author_name FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.slug=? AND p.status='published' LIMIT 1");$stmt->execute([$slug]);$post=$stmt->fetch();if(!$post){http_response_code(404);View::render('errors/404',['title'=>'Article introuvable']);return;}$db->prepare('UPDATE posts SET views_count=views_count+1 WHERE id=?')->execute([(int)$post['id']]);$stmt=$db->prepare("SELECT name,content,created_at FROM post_comments WHERE post_id=? AND status='approved' ORDER BY created_at ASC");$stmt->execute([(int)$post['id']]);View::render('site/article',['title'=>$post['title'],'active'=>'news','post'=>$post,'comments'=>$stmt->fetchAll()],'site');
     }
     public function commentArticle(): void
     {
-        $postId=(int)($_POST['post_id']??0);$name=mb_substr(trim((string)($_POST['name']??($_SESSION['user']['name']??''))),0,120);$email=mb_substr(trim((string)($_POST['email']??($_SESSION['user']['email']??''))),0,190);$content=mb_substr(trim((string)($_POST['content']??'')),0,3000);$db=Database::connection();
-        $stmt=$db->prepare("SELECT slug FROM posts WHERE id=? AND status='published'");$stmt->execute([$postId]);$slug=$stmt->fetchColumn();if(!$slug)$this->redirect('/actualites');
-        if($name===''||!filter_var($email,FILTER_VALIDATE_EMAIL)||mb_strlen($content)<3){$_SESSION['flash']='Renseignez un nom, un email valide et votre commentaire.';$this->redirect('/actualites/'.$slug.'#commentaires');}
-        $stmt=$db->prepare("INSERT INTO post_comments(post_id,user_id,name,email,content,status) VALUES(?,?,?,?,?,'approved')");$stmt->execute([$postId,$_SESSION['user']['id']??null,$name,$email,$content]);$_SESSION['flash']='Votre commentaire est publié.';$this->redirect('/actualites/'.$slug.'#commentaires');
+        $postId=(int)($_POST['post_id']??0);$name=mb_substr(trim((string)($_POST['name']??'')),0,120);$email=strtolower(trim((string)($_POST['email']??'')));$content=mb_substr(trim((string)($_POST['content']??'')),0,3000);if(!$postId||$name===''||!filter_var($email,FILTER_VALIDATE_EMAIL)||$content===''){$_SESSION['flash']='Complétez correctement le formulaire de commentaire.';$this->redirect('/actualites');}$db=Database::connection();$stmt=$db->prepare('SELECT slug FROM posts WHERE id=? AND status="published"');$stmt->execute([$postId]);$slug=$stmt->fetchColumn();if(!$slug){$this->redirect('/actualites');}$stmt=$db->prepare("INSERT INTO post_comments(post_id,user_id,name,email,content,status) VALUES(?,?,?,?,?,'approved')");$stmt->execute([$postId,$_SESSION['user']['id']??null,$name,$email,$content]);$_SESSION['flash']='Votre commentaire a été publié.';$this->redirect('/actualites/'.$slug.'#commentaires');
     }
-    private function verifyAndFinalizeCinetPay(string $transactionId): int
+    public function savePassword(): void { $this->requireUser();$password=(string)($_POST['password']??'');$confirmation=(string)($_POST['password_confirmation']??'');if(strlen($password)<8||$password!==$confirmation){$_SESSION['flash']='Mot de passe invalide ou confirmation différente.';$this->redirect('/profil');}Database::connection()->prepare('UPDATE users SET password=? WHERE id=?')->execute([password_hash($password,PASSWORD_DEFAULT),(int)$_SESSION['user']['id']]);$_SESSION['flash']='Mot de passe mis à jour.';$this->redirect('/profil'); }
+    private function cartSubtotal(): float { return array_reduce($_SESSION['cart']??[],fn($sum,$item)=>$sum+($item['price']*$item['quantity']),0); }
+    private function couponDiscount(?array $coupon,float $subtotal): float { if(!$coupon)return 0;$discount=$coupon['type']==='percent'?$subtotal*((float)$coupon['value']/100):(float)$coupon['value'];return min($subtotal,max(0,$discount)); }
+    public function finalizePaidOrder(int $orderId,array $paymentData,string $provider='cinetpay'): void
     {
-        $db=Database::connection();$stmt=$db->prepare("SELECT o.id,o.total,o.reference FROM orders o LEFT JOIN payments p ON p.order_id=o.id AND p.provider='cinetpay' WHERE o.reference=? OR p.provider_reference=? OR JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.data.merchant_transaction_id'))=? ORDER BY o.id DESC LIMIT 1");$stmt->execute([$transactionId,$transactionId,$transactionId]);$order=$stmt->fetch();if(!$order)throw new \RuntimeException('Transaction inconnue.');
-        $verification=(new CinetPay())->check($transactionId);$data=is_array($verification['data']??null)?$verification['data']:$verification;$status=strtoupper((string)($data['status']??''));$amountOk=!array_key_exists('amount',$data)||abs((float)$data['amount']-(float)$order['total'])<=0.001;$currencyOk=!array_key_exists('currency',$data)||strtoupper((string)$data['currency'])==='XOF';$referenceOk=!isset($data['merchant_transaction_id'])||in_array((string)$data['merchant_transaction_id'],[(string)$order['reference'],$transactionId],true);
-        if(!in_array($status,['ACCEPTED','SUCCESS'],true)||!$amountOk||!$currencyOk||!$referenceOk){$db->prepare("UPDATE payments SET status='failed',payload=? WHERE order_id=? AND provider='cinetpay' AND status NOT IN ('successful','refunded')")->execute([json_encode($verification,JSON_UNESCAPED_UNICODE),(int)$order['id']]);$db->prepare("UPDATE orders SET payment_status='failed' WHERE id=? AND payment_status NOT IN ('paid','refunded')")->execute([(int)$order['id']]);return (int)$order['id'];}
-        $this->finalizePaidOrder((int)$order['id'],$verification);return (int)$order['id'];
+        $db=Database::connection();$db->beginTransaction();try{$stmt=$db->prepare('SELECT * FROM orders WHERE id=? FOR UPDATE');$stmt->execute([$orderId]);$order=$stmt->fetch();if(!$order){$db->rollBack();return;}$data=$paymentData['data']??[];$status=strtoupper((string)($data['status']??''));if($status!=='ACCEPTED'){$db->prepare("UPDATE payments SET status='failed',payload=? WHERE order_id=? AND provider=?")->execute([json_encode($paymentData),$orderId,$provider]);$db->commit();return;}$expected=round((float)$order['total']);$received=round((float)($data['amount']??$expected));$currency=strtoupper((string)($data['currency']??'XOF'));if($received!==$expected||$currency!=='XOF')throw new \RuntimeException('Montant ou devise de paiement incohérent.');if($order['payment_status']!=='paid'){$db->prepare("UPDATE orders SET payment_status='paid',status=CASE WHEN status='pending' THEN 'confirmed' ELSE status END,paid_at=NOW() WHERE id=?")->execute([$orderId]);$db->prepare("UPDATE payments SET status='paid',provider_reference=COALESCE(NULLIF(?,''),provider_reference),transaction_reference=?,payer_phone=?,payment_channel=?,paid_at=COALESCE(paid_at,NOW()),payload=? WHERE order_id=? AND provider=?")->execute([(string)($data['payment_method']??''),(string)($data['operator_id']??''),(string)($data['payer_phone']??''),(string)($data['payment_method']??''),json_encode($paymentData),$orderId,$provider]);$db->prepare('INSERT INTO order_status_history(order_id,status,note) VALUES(?,?,?)')->execute([$orderId,'confirmed','Paiement confirmé par '.$provider]);$this->fulfillOrder($db,$orderId,$order);} $db->commit();}catch(\Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     }
-    public function finalizePaidOrder(int $orderId,array $verification,string $provider = 'cinetpay'): void
+    private function fulfillOrder(\PDO $db,int $orderId,array $order): void
     {
-        $db=Database::connection();$db->beginTransaction();try{$stmt=$db->prepare('SELECT * FROM orders WHERE id=? FOR UPDATE');$stmt->execute([$orderId]);$order=$stmt->fetch();if(!$order)throw new \RuntimeException('Commande introuvable.');if($provider==='cash_on_delivery'&&($order['payment_status']!=='cod'||$order['status']==='cancelled'))throw new \RuntimeException('Cette commande ne peut pas être encaissée à la livraison.');if($order['payment_status']==='paid'||$order['payment_status']==='refunded'){$db->commit();return;}
-            $db->prepare("UPDATE orders SET status=CASE WHEN status IN ('processing','shipping','completed','cancelled') THEN status ELSE 'paid' END,payment_status='paid',payment_method=CASE WHEN total>0 THEN ? ELSE payment_method END WHERE id=?")->execute([$provider,$orderId]);
-            $reference=(string)($verification['data']['operator_id']??$verification['data']['payment_method']??'');$payload=json_encode($verification,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);$update=$db->prepare("UPDATE payments SET status='successful',provider_reference=COALESCE(NULLIF(?,''),provider_reference),payload=JSON_MERGE_PATCH(COALESCE(payload,JSON_OBJECT()),?),paid_at=NOW() WHERE order_id=? AND provider=?");$update->execute([$reference,$payload,$orderId,$provider]);
-            if($update->rowCount()===0&&((float)$order['total'])>0)$db->prepare("INSERT INTO payments(order_id,provider,provider_reference,amount,status,payload,paid_at) VALUES(?,?,?,?,'successful',?,NOW())")->execute([$orderId,$provider,$reference,$order['total'],$payload]);
-            $details = $verification['notification'] ?? $verification['data'] ?? [];
-            $transactionReference = $details['transactionReference'] ?? $details['transactionId'] ?? $details['operator_id'] ?? null;
-            $payerPhone = $details['customerPhoneNumber'] ?? $details['payer_phone'] ?? null;
-            $channel = $details['channel'] ?? $details['payment_method'] ?? null;
-            foreach (['transactionReference'=>190,'payerPhone'=>40,'channel'=>60] as $field=>$length) {
-                $$field = is_scalar($$field) ? mb_substr(trim((string)$$field),0,$length) : null;
-            }
-            $db->prepare('UPDATE payments SET transaction_reference=COALESCE(?,transaction_reference),payer_phone=COALESCE(?,payer_phone),payment_channel=COALESCE(?,payment_channel) WHERE order_id=? AND provider=?')->execute([$transactionReference,$payerPhone,$channel,$orderId,$provider]);
-            $db->prepare('INSERT INTO order_status_history(order_id,status,note) VALUES(?,?,?)')->execute([$orderId,'paid','Paiement vérifié : '.$provider]);
-            if($order['payment_status']!=='cod'&&!empty($order['coupon_code']))$db->prepare('UPDATE coupons SET used_count=used_count+1 WHERE code=?')->execute([$order['coupon_code']]);
-            if($order['status']==='cancelled'){$db->commit();return;}
-            $customer=json_decode((string)$order['customer_data'],true)?:[];$userId=(int)($order['user_id']??0);if(!$userId&&!empty($customer['email'])){$user=$db->prepare('SELECT id FROM users WHERE email=? LIMIT 1');$user->execute([$customer['email']]);$userId=(int)$user->fetchColumn();}
-            $items=$db->prepare("SELECT oi.*,p.product_type,p.download_limit FROM order_items oi LEFT JOIN products p ON oi.item_type='product' AND p.id=oi.item_id WHERE oi.order_id=?");$items->execute([$orderId]);foreach($items as $item){if($item['item_type']==='course'&&$userId)$db->prepare("INSERT INTO enrollments(user_id,course_id,progress,status,source,order_id,payment_status) VALUES(?,?,0,'active','purchase',?,?) ON DUPLICATE KEY UPDATE order_id=VALUES(order_id),payment_status=VALUES(payment_status),status=IF(completed_at IS NULL,'active','completed')")->execute([$userId,(int)$item['item_id'],$orderId,(float)$order['total']>0?'paid':'free']);if($item['item_type']==='product'&&$item['product_type']==='digital'){$raw=$this->downloadToken((int)$item['id']);$db->prepare('INSERT IGNORE INTO digital_downloads(order_id,order_item_id,product_id,token_hash,download_limit,expires_at) VALUES(?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 30 DAY))')->execute([$orderId,(int)$item['id'],(int)$item['item_id'],hash('sha256',$raw),max(1,(int)$item['download_limit'])]);}}
-            $db->commit();
-        }catch(\Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+        $items=$db->prepare('SELECT * FROM order_items WHERE order_id=?');$items->execute([$orderId]);foreach($items->fetchAll() as $item){if($item['item_type']==='course'&&!empty($order['user_id'])){$stmt=$db->prepare("INSERT INTO enrollments(user_id,course_id,status,progress,payment_status,order_id) VALUES(?,?,'active',0,'paid',?) ON DUPLICATE KEY UPDATE status='active',payment_status='paid',order_id=VALUES(order_id)");$stmt->execute([(int)$order['user_id'],(int)$item['item_id'],$orderId]);}elseif($item['item_type']==='product'){$stmt=$db->prepare('SELECT product_type,digital_file,stock_quantity FROM products WHERE id=? FOR UPDATE');$stmt->execute([(int)$item['item_id']]);$product=$stmt->fetch();if(!$product)continue;if(($product['product_type']??'physical')==='digital'&&!empty($product['digital_file'])){$token=bin2hex(random_bytes(32));$db->prepare('INSERT INTO order_downloads(order_id,product_id,token_hash,max_downloads,expires_at) SELECT ?,id,?,download_limit,DATE_ADD(NOW(),INTERVAL 30 DAY) FROM products WHERE id=?')->execute([$orderId,hash('sha256',$token),(int)$item['item_id']]);$_SESSION['digital_download_tokens'][(int)$item['item_id']]=$token;}}}if(!empty($order['coupon_code']))$db->prepare('UPDATE coupons SET used_count=used_count+1 WHERE code=?')->execute([$order['coupon_code']]);
     }
-    private function orderForConfirmation(int $orderId): array
+    private function orderForConfirmation(int $id): ?array { $stmt=Database::connection()->prepare('SELECT * FROM orders WHERE id=?');$stmt->execute([$id]);$order=$stmt->fetch();if(!$order)return null;$order['downloads']=$this->orderDownloads($id);return $order; }
+    private function orderDownloads(int $id): array
     {
-        $db=Database::connection();$stmt=$db->prepare('SELECT * FROM orders WHERE id=?');$stmt->execute([$orderId]);$row=$stmt->fetch();if(!$row)return [];$customer=json_decode((string)$row['customer_data'],true)?:[];$items=$db->prepare('SELECT * FROM order_items WHERE order_id=? ORDER BY id');$items->execute([$orderId]);$items=$items->fetchAll();$downloads=[];if($row['payment_status']==='paid'){foreach($items as $item){if($item['item_type']!=='product')continue;$download=$db->prepare('SELECT download_limit FROM digital_downloads WHERE order_item_id=?');$download->execute([(int)$item['id']]);$limit=$download->fetchColumn();if($limit!==false)$downloads[]=['name'=>$item['label'],'token'=>$this->downloadToken((int)$item['id']),'limit'=>(int)$limit];}}
-        return ['id'=>(int)$row['id'],'reference'=>$row['reference'],'customer'=>$customer['name']??'','email'=>$customer['email']??'','payment'=>$row['payment_method'],'payment_status'=>$row['payment_status'],'payments'=>\App\Services\CommerceDetails::payments($db,$orderId),'refund'=>\App\Services\CommerceDetails::refund($db,$orderId),'phone'=>$customer['phone']??'','items'=>$items,'downloads'=>$downloads,'total'=>(float)$row['total'],'discount'=>(float)$row['discount'],'status'=>$row['status'],'created_at'=>$row['created_at']];
+        $tokens=$_SESSION['digital_download_tokens']??[];$stmt=Database::connection()->prepare("SELECT od.product_id,p.name FROM order_downloads od JOIN products p ON p.id=od.product_id WHERE od.order_id=? AND od.expires_at>NOW()");$stmt->execute([$id]);$rows=[];foreach($stmt->fetchAll() as $row)if(isset($tokens[(int)$row['product_id']]))$rows[]=['name'=>$row['name'],'url'=>'/commande/telecharger?token='.urlencode($tokens[(int)$row['product_id']])];return $rows;
     }
-    private function downloadToken(int $orderItemId): string { return hash_hmac('sha256','digital-download:'.$orderItemId,(string)Env::get('APP_KEY','ifmap')); }
-    private function publicUrl(string $path): string
-    {
-        $configured=rtrim((string)Env::get('APP_URL',''),'/');if($configured!==''&&!preg_match('#localhost|127\.0\.0\.1#i',$configured))return $configured.$path;$proto=($_SERVER['HTTP_X_FORWARDED_PROTO']??'')==='https'||(!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http';$host=(string)($_SERVER['HTTP_HOST']??'localhost');$base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/');return $proto.'://'.$host.$base.$path;
-    }
-    private function redirect(string $path): never { $base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/'); header('Location: '.$base.$path); exit; }
+    private function publicUrl(string $path): string { $base=rtrim((string)Env::get('APP_URL',''),' /');if($base===''){$scheme=(!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http';$base=$scheme.'://'.($_SERVER['HTTP_HOST']??'localhost');}return $base.$path; }
+    private function requireUser(): void { if(empty($_SESSION['user'])){$this->redirect('/connexion');} }
+    private function redirect(string $path): never { $base=rtrim(str_replace('/index.php','',str_replace('\\','/',$_SERVER['SCRIPT_NAME']??'/index.php')),'/');header('Location: '.$base.$path);exit; }
 }
