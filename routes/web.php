@@ -5,16 +5,27 @@ use App\Controllers\SiteController;
 use App\Controllers\AuthController;
 use App\Controllers\AcademyController;
 use App\Controllers\ProfileController;
+use App\Controllers\BrandingController;
+use App\Controllers\PublicPagesController;
 
 $router->get('/', [SiteController::class, 'home']);
-$router->get('/favicon.ico', function (): void { header('Location: /public/favicon.svg', true, 302); });
+$router->get('/favicon.ico', function (): void {
+    try {
+        $stmt=\App\Core\Database::connection()->prepare("SELECT `value` FROM settings WHERE `group`='branding' AND `key` IN ('favicon','logo') ORDER BY (`key`='favicon') DESC LIMIT 1");
+        $stmt->execute();
+        if($path=$stmt->fetchColumn()){header('Location: '.$path,true,302);return;}
+    } catch (\Throwable) {}
+    header('Location: /public/favicon.svg', true, 302);
+});
 $router->get('/formations', [SiteController::class, 'trainings']);
 $router->get('/formations/{slug}', [SiteController::class, 'training']);
 $router->get('/boutique', [SiteController::class, 'shop']);
+$router->get('/boutique/{slug}', [SiteController::class, 'product']);
 $router->get('/actualites', [SiteController::class, 'news']);
 $router->get('/actualites/{slug}', [SiteController::class, 'article']);
 $router->post('/actualites/commenter', [SiteController::class, 'commentArticle']);
-$router->get('/boutique/{slug}', [SiteController::class, 'product']);
+$router->get('/contact', [PublicPagesController::class, 'contact']);
+$router->get('/entreprise', [PublicPagesController::class, 'company']);
 $router->get('/panier', [SiteController::class, 'cart']);
 $router->post('/panier/ajouter', [SiteController::class, 'addCart']);
 $router->post('/panier/supprimer', [SiteController::class, 'removeCart']);
@@ -103,14 +114,12 @@ $router->get('/admin/documents/export-commandes', [AdminController::class, 'expo
 $router->get('/admin/documents/export-inscriptions', [AdminController::class, 'exportEnrollments']);
 $router->get('/admin/documents/commande', [AdminController::class, 'orderDocument']);
 $router->get('/admin/documents/livraison', [AdminController::class, 'deliveryDocument']);
-$router->get('/admin/branding', [AdminController::class, 'branding']);
-$router->post('/admin/branding', [AdminController::class, 'saveBranding']);
-
+$router->get('/admin/branding', [BrandingController::class, 'edit']);
+$router->post('/admin/branding', [BrandingController::class, 'save']);
 $router->get('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
 $router->get('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
 $router->post('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
 $router->post('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
-
 $router->post('/admin/commandes/action', [AdminController::class, 'orderAction']);
 $router->get('/conditions-generales', [SiteController::class, 'terms']);
 $router->get('/retours-remboursements', [SiteController::class, 'refundPolicy']);

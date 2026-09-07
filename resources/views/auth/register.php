@@ -1,8 +1,11 @@
 <main class="customer-auth-shell">
-    <a class="auth-logo customer-logo" href="/"><span>IF</span><div><strong>IFMAP</strong><small>NOTRE FLAMBEAU</small></div></a>
+    <a class="auth-logo customer-logo" href="/">
+        <span><?php if(!empty($brand['logo'])): ?><img src="<?= htmlspecialchars($brand['logo']) ?>" alt="Logo <?= htmlspecialchars($brand['name']) ?>"><?php else: ?>IF<?php endif ?></span>
+        <div><strong><?= htmlspecialchars($brand['name']) ?></strong><small>NOTRE FLAMBEAU</small></div>
+    </a>
     <form class="auth-form customer-form" method="post" action="/inscription" data-register-form>
         <input type="hidden" name="course_id" value="<?= (int)($courseId??0) ?>">
-        <p class="eyebrow">NOUVEAU COMPTE</p><h2>Rejoignez IFMAP</h2>
+        <p class="eyebrow">NOUVEAU COMPTE</p><h2>Rejoignez <?= htmlspecialchars($brand['name']) ?></h2>
         <p><?= !empty($courseId)?'Créez vos accès : votre inscription à la formation sera automatiquement rattachée à ce compte.':'Un seul compte pour vos formations, examens et attestations.' ?></p>
         <?php if($error): ?><div class="auth-error">! <?= htmlspecialchars($error) ?></div><?php endif ?>
         <label>Nom complet<input name="name" autocomplete="name" value="<?= htmlspecialchars($old['name']??'') ?>" required autofocus></label>
