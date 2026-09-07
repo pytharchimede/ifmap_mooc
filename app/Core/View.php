@@ -14,23 +14,31 @@ final class View
             $brand = array_merge($brand, $_SESSION['brand'] ?? []);
         }
 
+        /*
+         * Keep local asset paths canonical (/public/...). index.php is the single place
+         * that adds a sub-directory base path for web rendering. This also lets the
+         * PDF exporter resolve /public/... directly against the application root.
+         */
         $script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
         $basePath = rtrim(str_replace('/index.php', '', $script), '/');
-        $assetUrl = static function (?string $path) use ($basePath): ?string {
+        $canonicalAsset = static function (?string $path) use ($basePath): ?string {
             if ($path === null || $path === '') return $path;
             if (preg_match('~^(?:https?:)?//~i', $path) || str_starts_with($path, 'data:')) return $path;
-            if ($basePath !== '' && str_starts_with($path, $basePath . '/')) return $path;
-            if (str_starts_with($path, '/')) return $basePath . $path;
-            return $basePath . '/' . ltrim($path, '/');
+            $path = '/' . ltrim($path, '/');
+            if ($basePath !== '' && str_starts_with($path, $basePath . '/')) {
+                $path = substr($path, strlen($basePath));
+                if ($path === '') $path = '/';
+            }
+            return $path;
         };
 
         foreach (['logo','favicon','signature'] as $assetKey) {
-            $brand[$assetKey] = $assetUrl($brand[$assetKey] ?? null);
+            $brand[$assetKey] = $canonicalAsset($brand[$assetKey] ?? null);
         }
 
         $brand = array_merge($brand, $data['brand'] ?? []);
         foreach (['logo','favicon','signature'] as $assetKey) {
-            $brand[$assetKey] = $assetUrl($brand[$assetKey] ?? null);
+            $brand[$assetKey] = $canonicalAsset($brand[$assetKey] ?? null);
         }
 
         $_SESSION['brand'] = $brand;
