@@ -12,10 +12,10 @@ final class OfficialPdfBridge
         $brand = self::brand();
 
         if ($type === 'certificate') {
-            OfficialPdfExporter::certificate($data, $brand, !empty($payload['specimen']));
+            OfficialPdfExporterV2::certificate($data, $brand, !empty($payload['specimen']));
         }
         if ($type === 'attestation') {
-            OfficialPdfExporter::attestation($data, $brand);
+            OfficialPdfExporterV2::attestation($data, $brand);
         }
 
         throw new \RuntimeException('Type de document officiel non pris en charge par TCPDF.');
