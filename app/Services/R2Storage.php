@@ -18,6 +18,7 @@ final class R2Storage
 
     public function createTestimonialUpload(int $userId,string $originalName,string $contentType,int $size): array
     {
+        $contentType=strtolower(trim(explode(';',$contentType,2)[0]));
         $allowed=['video/mp4'=>'mp4','video/webm'=>'webm','video/quicktime'=>'mov'];
         if(!isset($allowed[$contentType]))throw new \InvalidArgumentException('Format vidéo non autorisé. Utilisez MP4, WebM ou MOV.');
         if($size<1||$size>100*1024*1024)throw new \InvalidArgumentException('Le témoignage vidéo doit peser moins de 100 Mo.');
@@ -25,7 +26,7 @@ final class R2Storage
         $key='testimonials/'.$userId.'/'.date('Y/m').'/'.bin2hex(random_bytes(8)).'-'.mb_substr($base,0,60).'.'.$allowed[$contentType];
         $command=$this->client()->getCommand('PutObject',['Bucket'=>$this->bucket(),'Key'=>$key,'ContentType'=>$contentType]);
         $request=$this->client()->createPresignedRequest($command,'+15 minutes');
-        return ['upload_url'=>(string)$request->getUri(),'preview_url'=>$this->playbackUrl('r2://'.$key),'key'=>$key,'content'=>'r2://'.$key,'expires_in'=>900];
+        return ['upload_url'=>(string)$request->getUri(),'preview_url'=>$this->playbackUrl('r2://'.$key),'key'=>$key,'content'=>'r2://'.$key,'content_type'=>$contentType,'expires_in'=>900];
     }
 
     public function playbackUrl(string $content): string
