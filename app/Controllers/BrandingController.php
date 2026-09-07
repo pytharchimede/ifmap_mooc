@@ -6,10 +6,17 @@ use App\Core\View;
 
 final class BrandingController
 {
+    private function baseUrl(string $path): string
+    {
+        $script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
+        $base = rtrim(str_replace('/index.php', '', $script), '/');
+        return $base . '/' . ltrim($path, '/');
+    }
+
     private function guard(): void
     {
         if (!($_SESSION['admin_authenticated'] ?? false)) {
-            header('Location: /admin/connexion');
+            header('Location: ' . $this->baseUrl('/admin/connexion'));
             exit;
         }
     }
@@ -110,7 +117,7 @@ final class BrandingController
 
     private function redirect(): never
     {
-        header('Location: /admin/branding');
+        header('Location: ' . $this->baseUrl('/admin/branding'));
         exit;
     }
 }
