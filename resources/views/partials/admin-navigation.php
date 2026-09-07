@@ -4,6 +4,7 @@
     <a class="<?= $active==='admin-courses'?'active':'' ?>" href="/admin/cours"><i data-icon="book"></i>Formations</a>
     <a class="<?= $active==='admin-enrollments'?'active':'' ?>" href="/admin/inscriptions"><i data-icon="users"></i>Inscriptions aux cours</a>
     <a class="<?= $active==='admin-users'?'active':'' ?>" href="/admin/utilisateurs"><i data-icon="users"></i>Utilisateurs</a>
+    <a class="<?= $active==='admin-testimonials'?'active':'' ?>" href="/admin/temoignages"><i data-icon="play"></i>Témoignages vidéo</a>
     <a class="<?= $active==='admin-orders'?'active':'' ?>" href="/admin/commandes"><i data-icon="chart"></i>Finances & commandes</a>
     <a class="<?= $active==='admin-documents'?'active':'' ?>" href="/admin/documents"><i data-icon="award"></i>Documents & exports</a>
     <a class="<?= $active==='admin-news'?'active':'' ?>" href="/admin/actualites"><i data-icon="mail"></i>Actualités & blog</a>
