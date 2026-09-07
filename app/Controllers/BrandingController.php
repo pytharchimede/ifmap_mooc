@@ -21,6 +21,35 @@ final class BrandingController
         }
     }
 
+    private function ensureSettingsSchema(): void
+    {
+        $db = Database::connection();
+        $db->exec("CREATE TABLE IF NOT EXISTS settings (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            `key` VARCHAR(120) NOT NULL,
+            `value` LONGTEXT NULL,
+            `group` VARCHAR(80) NOT NULL DEFAULT 'general',
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY settings_group_key_unique (`group`,`key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        try {
+            $columns = [];
+            foreach ($db->query('SHOW COLUMNS FROM settings') as $column) {
+                $columns[$column['Field']] = true;
+            }
+            if (!isset($columns['group'])) {
+                $db->exec("ALTER TABLE settings ADD COLUMN `group` VARCHAR(80) NOT NULL DEFAULT 'general' AFTER `value`");
+            }
+            if (!isset($columns['value'])) {
+                $db->exec("ALTER TABLE settings ADD COLUMN `value` LONGTEXT NULL AFTER `key`");
+            }
+        } catch (\Throwable $e) {
+            error_log('Branding schema check: ' . $e->getMessage());
+        }
+    }
+
     private function brand(): array
     {
         $brand = [
@@ -32,19 +61,59 @@ final class BrandingController
             'signature' => null,
         ];
         try {
+            $this->ensureSettingsSchema();
             foreach (Database::connection()->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row) {
                 if (array_key_exists($row['key'], $brand)) {
                     $brand[$row['key']] = $row['value'];
                 }
             }
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            error_log('Branding read: ' . $e->getMessage());
         }
         return $brand;
+    }
+
+    private function brandingDirectory(): string
+    {
+        $root = dirname(__DIR__, 2);
+        $uploads = $root . '/public/uploads';
+        $directory = $uploads . '/branding';
+
+        foreach ([$uploads, $directory] as $path) {
+            if (!is_dir($path)) {
+                @mkdir($path, 0775, true);
+            }
+            if (is_dir($path) && !is_writable($path)) {
+                @chmod($path, 0775);
+            }
+            if (is_dir($path) && !is_writable($path)) {
+                @chmod($path, 0777);
+            }
+        }
+
+        if (!is_dir($directory)) {
+            throw new \RuntimeException('Le dossier public/uploads/branding n’a pas pu être créé automatiquement.');
+        }
+        if (!is_writable($directory)) {
+            throw new \RuntimeException('Le dossier public/uploads/branding existe mais PHP n’a pas le droit d’y écrire. Vérifiez le propriétaire du dossier sur le serveur.');
+        }
+
+        $probe = $directory . '/.write-test-' . bin2hex(random_bytes(4));
+        if (@file_put_contents($probe, 'ok', LOCK_EX) === false) {
+            throw new \RuntimeException('Le dossier public/uploads/branding n’est pas réellement accessible en écriture par PHP.');
+        }
+        @unlink($probe);
+        return $directory;
     }
 
     public function edit(): void
     {
         $this->guard();
+        try {
+            $this->brandingDirectory();
+        } catch (\RuntimeException $e) {
+            $_SESSION['flash'] = $e->getMessage();
+        }
         $brand = $this->brand();
         $_SESSION['brand'] = $brand;
         View::render('admin/branding', [
@@ -58,13 +127,9 @@ final class BrandingController
     {
         $this->guard();
         $current = $this->brand();
-        $directory = dirname(__DIR__, 2) . '/public/uploads/branding';
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-            $_SESSION['flash'] = 'Impossible de créer le dossier du branding.';
-            $this->redirect();
-        }
 
         try {
+            $directory = $this->brandingDirectory();
             $logo = $this->store('logo', [
                 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp',
             ], 2 * 1024 * 1024, $directory) ?: $current['logo'];
@@ -73,7 +138,7 @@ final class BrandingController
                 'image/x-icon' => 'ico', 'image/vnd.microsoft.icon' => 'ico',
             ], 1024 * 1024, $directory) ?: $current['favicon'];
             $signature = $this->store('signature', [
-                'image/jpeg' => 'jpg', 'image/png' => 'png',
+                'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp',
             ], 2 * 1024 * 1024, $directory) ?: $current['signature'];
         } catch (\RuntimeException $e) {
             $_SESSION['flash'] = $e->getMessage();
@@ -89,10 +154,27 @@ final class BrandingController
             'signature' => $signature,
         ];
 
-        $stmt = Database::connection()->prepare("INSERT INTO settings(`key`,`value`,`group`) VALUES(?,?,'branding') ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)");
-        foreach ($brand as $key => $value) {
-            $stmt->execute([$key, $value]);
+        try {
+            $this->ensureSettingsSchema();
+            $db = Database::connection();
+            $update = $db->prepare("UPDATE settings SET `value`=? WHERE `group`='branding' AND `key`=?");
+            $insert = $db->prepare("INSERT INTO settings(`key`,`value`,`group`) VALUES(?,?,'branding')");
+            foreach ($brand as $key => $value) {
+                $update->execute([$value, $key]);
+                if ($update->rowCount() === 0) {
+                    try {
+                        $insert->execute([$key, $value]);
+                    } catch (\Throwable) {
+                        $update->execute([$value, $key]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('Branding save database: ' . $e->getMessage());
+            $_SESSION['flash'] = 'Les fichiers ont été préparés, mais les paramètres du branding n’ont pas pu être enregistrés en base de données.';
+            $this->redirect();
         }
+
         $_SESSION['brand'] = $brand;
         $_SESSION['flash'] = 'Identité visuelle enregistrée et appliquée à la plateforme.';
         $this->redirect();
@@ -100,18 +182,60 @@ final class BrandingController
 
     private function store(string $field, array $allowed, int $maxBytes, string $directory): ?string
     {
-        if (empty($_FILES[$field]['tmp_name']) || !is_uploaded_file($_FILES[$field]['tmp_name'])) {
+        if (!isset($_FILES[$field])) {
             return null;
         }
+
         $file = $_FILES[$field];
-        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
-        if (!isset($allowed[$mime]) || (int)$file['size'] > $maxBytes) {
-            throw new \RuntimeException('Le fichier « '.$field.' » est invalide ou trop volumineux.');
+        $error = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE) {
+            return null;
         }
+        if ($error !== UPLOAD_ERR_OK) {
+            $messages = [
+                UPLOAD_ERR_INI_SIZE => 'dépasse la taille autorisée par PHP',
+                UPLOAD_ERR_FORM_SIZE => 'dépasse la taille autorisée par le formulaire',
+                UPLOAD_ERR_PARTIAL => 'n’a été reçu que partiellement',
+                UPLOAD_ERR_NO_TMP_DIR => 'ne peut pas être traité car le dossier temporaire PHP manque',
+                UPLOAD_ERR_CANT_WRITE => 'ne peut pas être écrit sur le disque',
+                UPLOAD_ERR_EXTENSION => 'a été bloqué par une extension PHP',
+            ];
+            throw new \RuntimeException('Le fichier « ' . $field . ' » ' . ($messages[$error] ?? 'n’a pas pu être téléversé') . '.');
+        }
+
+        $tmp = (string)($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            throw new \RuntimeException('Le fichier temporaire « ' . $field . ' » est introuvable ou invalide.');
+        }
+        if (!is_writable($directory)) {
+            @chmod($directory, 0777);
+        }
+        if (!is_writable($directory)) {
+            throw new \RuntimeException('Le dossier de destination du branding n’est pas accessible en écriture.');
+        }
+
+        $size = (int)($file['size'] ?? 0);
+        if ($size <= 0 || $size > $maxBytes) {
+            throw new \RuntimeException('Le fichier « ' . $field . ' » est vide ou trop volumineux.');
+        }
+
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp);
+        if (!is_string($mime) || !isset($allowed[$mime])) {
+            throw new \RuntimeException('Le format du fichier « ' . $field . ' » n’est pas accepté.');
+        }
+
         $filename = $field . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(6)) . '.' . $allowed[$mime];
-        if (!move_uploaded_file($file['tmp_name'], $directory . '/' . $filename)) {
-            throw new \RuntimeException('Impossible d’enregistrer le fichier « '.$field.' ».');
+        $target = $directory . '/' . $filename;
+        if (!@move_uploaded_file($tmp, $target)) {
+            throw new \RuntimeException('Impossible d’enregistrer le fichier « ' . $field . ' » dans public/uploads/branding malgré la préparation automatique du dossier.');
         }
+        @chmod($target, 0644);
+
+        if (!is_file($target) || filesize($target) < 1) {
+            @unlink($target);
+            throw new \RuntimeException('Le fichier « ' . $field . ' » n’a pas été correctement écrit sur le disque.');
+        }
+
         return '/public/uploads/branding/' . $filename;
     }
 
