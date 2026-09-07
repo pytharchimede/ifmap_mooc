@@ -5,6 +5,7 @@ use App\Core\View;
 use App\Core\Database;
 use App\Core\Env;
 use App\Services\CinetPay;
+use App\Services\PaiementPro;
 
 final class SiteController
 {
@@ -105,24 +106,87 @@ final class SiteController
     public function placeOrder(): void
     {
         if (empty($_SESSION['cart'])) $this->redirect('/panier');
+        $hasTraining = (bool) array_filter($_SESSION['cart'], fn($item) => ($item['kind'] ?? '') === 'formation');
+        if ($hasTraining && empty($_SESSION['user'])) { $_SESSION['intended_url']='/commande'; $this->redirect('/connexion'); }
+        if (!in_array($_POST['payment'] ?? '', ['online','delivery'], true) || !in_array($_POST['delivery'] ?? '', ['pickup','delivery'], true)) { $_SESSION['checkout_error']='Mode de paiement ou de livraison invalide.'; $this->redirect('/commande'); }
         $hasProduct = (bool)array_filter($_SESSION['cart'],fn($item)=>($item['kind']??'')==='product');
         $hasPhysical = (bool)array_filter($_SESSION['cart'],fn($item)=>($item['kind']??'')==='product'&&($item['product_type']??'physical')==='physical');
         if (!$hasPhysical) { $_POST['delivery']='pickup'; if(($_POST['payment']??'')==='delivery')$_POST['payment']='online'; }
         $required=['name','email','phone','payment','delivery']; foreach($required as $field) if(trim($_POST[$field]??'')===''){$_SESSION['checkout_error']='Veuillez remplir tous les champs obligatoires.';$this->redirect('/commande');}
         if($hasPhysical&&($_POST['delivery']??'')==='delivery'&&trim((string)($_POST['address']??''))===''){$_SESSION['checkout_error']='Indiquez l’adresse complète de livraison.';$this->redirect('/commande');}
         if(!filter_var($_POST['email'],FILTER_VALIDATE_EMAIL)){$_SESSION['checkout_error']='Adresse email invalide.';$this->redirect('/commande');}
-        $subtotal=$this->cartSubtotal();$coupon=$_SESSION['coupon']??null;$discount=$this->couponDiscount($coupon,$subtotal);$total=max(0,$subtotal-$discount);if($total>0)$total=max(100,floor($total/5)*5);
+        $subtotal=$this->cartSubtotal();$coupon=$_SESSION['coupon']??null;$discount=$this->couponDiscount($coupon,$subtotal);$total=max(0,$subtotal-$discount);if($total>0)$total=round($total);
         $db=Database::connection();$db->beginTransaction();try{
-            $reference='IF-'.date('Y').'-'.str_pad((string)((int)$db->query('SELECT COUNT(*)+1 FROM orders')->fetchColumn()),4,'0',STR_PAD_LEFT);$userId=$_SESSION['user']['id']??null;$status='pending';$paymentStatus=$_POST['payment']==='delivery'?'cod':'pending';$customer=['name'=>trim($_POST['name']),'email'=>trim($_POST['email']),'phone'=>trim($_POST['phone']),'company'=>trim((string)($_POST['company']??'')),'address'=>trim((string)($_POST['address']??''))];
+            $reference='IF-'.date('Y').'-'.strtoupper(bin2hex(random_bytes(8)));$userId=$_SESSION['user']['id']??null;$status='pending';$paymentStatus=$_POST['payment']==='delivery'?'cod':'pending';$customer=['name'=>trim($_POST['name']),'email'=>trim($_POST['email']),'phone'=>trim($_POST['phone']),'company'=>trim((string)($_POST['company']??'')),'address'=>trim((string)($_POST['address']??''))];
             $stmt=$db->prepare('INSERT INTO orders(user_id,reference,status,payment_method,payment_status,delivery_method,subtotal,discount,total,coupon_code,customer_data) VALUES(?,?,?,?,?,?,?,?,?,?,?)');$stmt->execute([$userId,$reference,$status,$_POST['payment'],$paymentStatus,$_POST['delivery'],$subtotal,$discount,$total,$coupon['code']??null,json_encode($customer,JSON_UNESCAPED_UNICODE)]);$orderId=(int)$db->lastInsertId();$itemStmt=$db->prepare('INSERT INTO order_items(order_id,item_type,item_id,label,quantity,unit_price,total) VALUES(?,?,?,?,?,?,?)');
             foreach($_SESSION['cart'] as $item){$itemId=($item['kind']??'')==='formation'?(int)($item['course_id']??0):(int)($item['product_id']??0);$itemType=($item['kind']??'')==='formation'?'course':'product';$itemStmt->execute([$orderId,$itemType,$itemId,$item['name'],$item['quantity'],$item['price'],$item['price']*$item['quantity']]);if($paymentStatus==='cod'&&$itemType==='product'&&$itemId&&($item['product_type']??'physical')==='physical')$this->decrementProductStock($db,$itemId,(int)$item['quantity'],$orderId,'Commande avec paiement à la livraison');}
             $db->prepare('INSERT INTO order_status_history(order_id,status,note) VALUES(?,?,?)')->execute([$orderId,$status,'Commande créée']);if($coupon&&$paymentStatus==='cod')$db->prepare('UPDATE coupons SET used_count=used_count+1 WHERE id=?')->execute([(int)$coupon['id']]);
             $db->commit();$order=['id'=>$orderId,'reference'=>$reference,'customer'=>$customer['name'],'email'=>$customer['email'],'payment'=>$_POST['payment'],'items'=>$_SESSION['cart'],'downloads'=>[],'total'=>$total,'discount'=>$discount,'status'=>$status,'created_at'=>date('c')];
         }catch(\Throwable $e){if($db->inTransaction())$db->rollBack();$_SESSION['checkout_error']='La commande n’a pas pu être enregistrée.';$this->redirect('/commande');}
-        if($_POST['payment']==='online'&&$total>0){try{$gateway=new CinetPay();if(!$gateway->configured())throw new \RuntimeException('Configuration CinetPay absente.');$dbOrder=$db->query('SELECT * FROM orders WHERE id='.$orderId)->fetch();$response=$gateway->initialize($dbOrder,$this->publicUrl('/paiement/cinetpay/retour'),$this->publicUrl('/paiement/cinetpay/notification'));$paymentUrl=(string)($response['data']['payment_url']??'');$providerReference=(string)($response['data']['payment_token']??'');if((string)($response['code']??'')!=='201'||!filter_var($paymentUrl,FILTER_VALIDATE_URL))throw new \RuntimeException('Initialisation refusée : '.(string)($response['message']??$response['description']??'réponse non reconnue').'.');$db->prepare("INSERT INTO payments(order_id,provider,provider_reference,amount,status,payload) VALUES(?,'cinetpay',?,?,'initiated',?)")->execute([$orderId,$providerReference,$total,json_encode($response,JSON_UNESCAPED_UNICODE)]);$_SESSION['pending_order_id']=$orderId;$_SESSION['cart']=[];unset($_SESSION['coupon']);header('Location: '.$paymentUrl);exit;}catch(\Throwable $e){$safeDetail=mb_substr(preg_replace('/[\r\n]+/',' ',(string)$e->getMessage()),0,500);error_log('CinetPay Checkout init commande '.$orderId.' : '.$safeDetail);$logDirectory=dirname(__DIR__,2).'/storage/logs';if(is_dir($logDirectory)&&is_writable($logDirectory))@file_put_contents($logDirectory.'/cinetpay.log','['.date('c').'] commande '.$orderId.' '.$safeDetail."\n",FILE_APPEND|LOCK_EX);$db->prepare("UPDATE orders SET payment_status='failed' WHERE id=?")->execute([$orderId]);$_SESSION['checkout_error']='CinetPay Checkout : '.$safeDetail.' Votre panier a été conservé.';$this->redirect('/commande');}}
+        if ($_POST['payment'] === 'online' && $total > 0) {
+            try {
+                $token = bin2hex(random_bytes(32));
+                $metadata = ['notification_token_hash' => hash('sha256', $token)];
+                $db->prepare("INSERT INTO payments(order_id,provider,amount,status,payload) VALUES(?,'paiementpro',?,'initiated',?)")
+                    ->execute([$orderId, $total, json_encode($metadata)]);
+                $dbOrder = $db->query('SELECT * FROM orders WHERE id='.$orderId)->fetch();
+                $response = (new PaiementPro())->initialize($dbOrder, $this->publicUrl('/paiement/paiementpro/retour'), $this->publicUrl('/paiement/paiementpro/notification').'?token='.$token);
+                $db->prepare("UPDATE payments SET provider_reference=? WHERE order_id=? AND provider='paiementpro'")
+                    ->execute([$response['session_id'], $orderId]);
+                $_SESSION['pending_order_id'] = $orderId;
+                $_SESSION['cart'] = [];
+                unset($_SESSION['coupon']);
+                header('Location: '.$response['payment_url']);
+                exit;
+            } catch (\Throwable $e) {
+                error_log('Paiement Pro init commande '.$orderId.' : '.$e->getMessage());
+                $_SESSION['checkout_error'] = 'Impossible d’ouvrir Paiement Pro. Veuillez réessayer. Votre panier a été conservé.';
+                $this->redirect('/commande');
+            }
+        }
         if($_POST['payment']==='online'&&$total<=0){$this->finalizePaidOrder($orderId,['data'=>['status'=>'ACCEPTED','amount'=>0,'currency'=>'XOF']]);$order=$this->orderForConfirmation($orderId);}
         $_SESSION['last_order']=$order;$_SESSION['cart']=[];unset($_SESSION['coupon']);$this->redirect('/commande/confirmation');
     }
+    public function paiementProNotify(): void
+    {
+        $payload = $_POST ?: (json_decode((string) file_get_contents('php://input'), true) ?: $_GET);
+        if (!is_array($payload) || !is_string($payload['referenceNumber'] ?? null)) { http_response_code(400); return; }
+        $db = Database::connection();
+        $stmt = $db->prepare("SELECT o.*,p.payload payment_payload FROM orders o JOIN payments p ON p.order_id=o.id AND p.provider='paiementpro' WHERE o.reference=? LIMIT 1");
+        $stmt->execute([$payload['referenceNumber']]);
+        $order = $stmt->fetch();
+        $metadata = $order ? (json_decode($order['payment_payload'], true) ?: []) : [];
+        $token = is_string($_GET['token'] ?? null) ? $_GET['token'] : '';
+        if (!$order || !(new PaiementPro())->validNotification($payload, $order, $token, $metadata['notification_token_hash'] ?? '')) {
+            http_response_code(403); return;
+        }
+        try {
+            if ((string) $payload['responsecode'] === '0') {
+                $this->finalizePaidOrder((int) $order['id'], ['notification' => array_intersect_key($payload, array_flip(['merchantId','referenceNumber','countryCurrencyCode','amount','responsecode','transactiondt']))], 'paiementpro');
+            } else {
+                $db->prepare("UPDATE orders SET payment_status='failed' WHERE id=? AND payment_status NOT IN ('paid','refunded')")->execute([$order['id']]);
+                $db->prepare("UPDATE payments SET status='failed' WHERE order_id=? AND provider='paiementpro' AND status IN ('initiated','pending')")->execute([$order['id']]);
+            }
+            echo 'OK';
+        } catch (\Throwable $e) {
+            error_log('Paiement Pro notification: '.$e->getMessage());
+            http_response_code(500);
+        }
+    }
+
+    public function paiementProReturn(): void
+    {
+        // Browser parameters are untrusted. Only display the session's own order.
+        $orderId = (int) ($_SESSION['pending_order_id'] ?? 0);
+        if (!$orderId) { $_SESSION['flash'] = 'Votre paiement est en cours de vérification.'; $this->redirect('/boutique'); }
+        $order = $this->orderForConfirmation($orderId);
+        $_SESSION['last_order'] = $order;
+        if (($order['payment_status'] ?? '') !== 'paid') {
+            $_SESSION['payment_error'] = 'Le paiement n’est pas encore confirmé. Actualisez cette page dans quelques instants.';
+        }
+        $this->redirect('/commande/confirmation');
+    }
+
     public function cinetPayNotify(): void
     {
         if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'){http_response_code(200);echo 'OK';return;}
@@ -140,7 +204,16 @@ final class SiteController
         if(($order['payment_status']??'')!=='paid')$_SESSION['payment_error']='Le paiement n’est pas encore confirmé. Aucun débit de stock ni accès numérique n’a été effectué.';
         $this->redirect('/commande/confirmation');
     }
-    public function confirmation(): void { if(empty($_SESSION['last_order'])) $this->redirect('/');$error=$_SESSION['payment_error']??null;unset($_SESSION['payment_error']);View::render('site/confirmation',['title'=>$error?'Paiement non confirmé':'Commande confirmée','active'=>'cart','order'=>$_SESSION['last_order'],'paymentError'=>$error],'site'); }
+    public function confirmation(): void
+    {
+        if (empty($_SESSION['last_order'])) $this->redirect('/');
+        $order = $this->orderForConfirmation((int) $_SESSION['last_order']['id']);
+        $_SESSION['last_order'] = $order;
+        $error = in_array($order['payment_status'] ?? '', ['pending','failed'], true)
+            ? 'Le paiement n’est pas encore confirmé. Actualisez cette page dans quelques instants.' : null;
+        unset($_SESSION['payment_error']);
+        View::render('site/confirmation', ['title'=>$error?'Paiement non confirmé':'Commande confirmée','active'=>'cart','order'=>$order,'paymentError'=>$error], 'site');
+    }
     public function downloadProduct(): void
     {
         $token=(string)($_GET['token']??'');if(!preg_match('/^[a-f0-9]{64}$/',$token)){http_response_code(404);return;}$db=Database::connection();$stmt=$db->prepare("SELECT dd.*,p.name,p.digital_file,o.payment_status,o.status FROM digital_downloads dd JOIN products p ON p.id=dd.product_id JOIN orders o ON o.id=dd.order_id WHERE dd.token_hash=? LIMIT 1");$stmt->execute([hash('sha256',$token)]);$download=$stmt->fetch();if(!$download||$download['payment_status']!=='paid'||$download['status']==='cancelled'||$download['download_count']>=$download['download_limit']||($download['expires_at']&&strtotime($download['expires_at'])<time())){http_response_code(403);echo 'Ce lien de téléchargement est invalide, expiré ou sa limite a été atteinte.';return;}$path=dirname(__DIR__,2).'/'.ltrim((string)$download['digital_file'],'/');if(!is_file($path)){http_response_code(404);echo 'Fichier indisponible.';return;}$db->prepare('UPDATE digital_downloads SET download_count=download_count+1,last_downloaded_at=NOW() WHERE id=?')->execute([(int)$download['id']]);$extension=pathinfo($path,PATHINFO_EXTENSION);$filename=preg_replace('/[^a-z0-9_-]+/i','-',iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$download['name'])?:'livre').'.'.$extension;header('Content-Type: application/octet-stream');header('Content-Disposition: attachment; filename="'.$filename.'"');header('Content-Length: '.filesize($path));header('X-Content-Type-Options: nosniff');readfile($path);exit;
@@ -206,16 +279,16 @@ final class SiteController
         if(!in_array($status,['ACCEPTED','SUCCESS'],true)||!$amountOk||!$currencyOk||!$referenceOk){$db->prepare("UPDATE payments SET status='failed',payload=? WHERE order_id=? AND provider='cinetpay'")->execute([json_encode($verification,JSON_UNESCAPED_UNICODE),(int)$order['id']]);$db->prepare("UPDATE orders SET payment_status='failed' WHERE id=? AND payment_status<>'paid'")->execute([(int)$order['id']]);return (int)$order['id'];}
         $this->finalizePaidOrder((int)$order['id'],$verification);return (int)$order['id'];
     }
-    private function finalizePaidOrder(int $orderId,array $verification): void
+    private function finalizePaidOrder(int $orderId,array $verification,string $provider = 'cinetpay'): void
     {
-        $db=Database::connection();$db->beginTransaction();try{$stmt=$db->prepare('SELECT * FROM orders WHERE id=? FOR UPDATE');$stmt->execute([$orderId]);$order=$stmt->fetch();if(!$order)throw new \RuntimeException('Commande introuvable.');if($order['payment_status']==='paid'){$db->commit();return;}
-            $db->prepare("UPDATE orders SET status='paid',payment_status='paid',payment_method=CASE WHEN total>0 THEN 'cinetpay' ELSE payment_method END WHERE id=?")->execute([$orderId]);
-            $reference=(string)($verification['data']['operator_id']??$verification['data']['payment_method']??'');$payload=json_encode($verification,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);$update=$db->prepare("UPDATE payments SET status='successful',provider_reference=COALESCE(NULLIF(?,''),provider_reference),payload=?,paid_at=NOW() WHERE order_id=? AND provider='cinetpay'");$update->execute([$reference,$payload,$orderId]);
-            if($update->rowCount()===0&&((float)$order['total'])>0)$db->prepare("INSERT INTO payments(order_id,provider,provider_reference,amount,status,payload,paid_at) VALUES(?,'cinetpay',?,?,'successful',?,NOW())")->execute([$orderId,$reference,$order['total'],$payload]);
-            $db->prepare('INSERT INTO order_status_history(order_id,status,note) VALUES(?,?,?)')->execute([$orderId,'paid','Paiement CinetPay vérifié']);
+        $db=Database::connection();$db->beginTransaction();try{$stmt=$db->prepare('SELECT * FROM orders WHERE id=? FOR UPDATE');$stmt->execute([$orderId]);$order=$stmt->fetch();if(!$order)throw new \RuntimeException('Commande introuvable.');if($order['payment_status']==='paid'||$order['payment_status']==='refunded'||$order['status']==='cancelled'){$db->commit();return;}
+            $db->prepare("UPDATE orders SET status='paid',payment_status='paid',payment_method=CASE WHEN total>0 THEN ? ELSE payment_method END WHERE id=?")->execute([$provider,$orderId]);
+            $reference=(string)($verification['data']['operator_id']??$verification['data']['payment_method']??'');$payload=json_encode($verification,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);$update=$db->prepare("UPDATE payments SET status='successful',provider_reference=COALESCE(NULLIF(?,''),provider_reference),payload=JSON_MERGE_PATCH(COALESCE(payload,JSON_OBJECT()),?),paid_at=NOW() WHERE order_id=? AND provider=?");$update->execute([$reference,$payload,$orderId,$provider]);
+            if($update->rowCount()===0&&((float)$order['total'])>0)$db->prepare("INSERT INTO payments(order_id,provider,provider_reference,amount,status,payload,paid_at) VALUES(?,?,?,?,'successful',?,NOW())")->execute([$orderId,$provider,$reference,$order['total'],$payload]);
+            $db->prepare('INSERT INTO order_status_history(order_id,status,note) VALUES(?,?,?)')->execute([$orderId,'paid','Paiement vérifié : '.$provider]);
             if(!empty($order['coupon_code']))$db->prepare('UPDATE coupons SET used_count=used_count+1 WHERE code=?')->execute([$order['coupon_code']]);
             $customer=json_decode((string)$order['customer_data'],true)?:[];$userId=(int)($order['user_id']??0);if(!$userId&&!empty($customer['email'])){$user=$db->prepare('SELECT id FROM users WHERE email=? LIMIT 1');$user->execute([$customer['email']]);$userId=(int)$user->fetchColumn();}
-            $items=$db->prepare("SELECT oi.*,p.product_type,p.download_limit FROM order_items oi LEFT JOIN products p ON oi.item_type='product' AND p.id=oi.item_id WHERE oi.order_id=?");$items->execute([$orderId]);foreach($items as $item){if($item['item_type']==='course'&&$userId)$db->prepare('INSERT IGNORE INTO enrollments(user_id,course_id,progress) VALUES(?,?,0)')->execute([$userId,(int)$item['item_id']]);if($item['item_type']==='product'&&$item['product_type']==='physical')$this->decrementProductStock($db,(int)$item['item_id'],(int)$item['quantity'],$orderId,'Vente payée via CinetPay');if($item['item_type']==='product'&&$item['product_type']==='digital'){$raw=$this->downloadToken((int)$item['id']);$db->prepare('INSERT IGNORE INTO digital_downloads(order_id,order_item_id,product_id,token_hash,download_limit,expires_at) VALUES(?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 30 DAY))')->execute([$orderId,(int)$item['id'],(int)$item['item_id'],hash('sha256',$raw),max(1,(int)$item['download_limit'])]);}}
+            $items=$db->prepare("SELECT oi.*,p.product_type,p.download_limit FROM order_items oi LEFT JOIN products p ON oi.item_type='product' AND p.id=oi.item_id WHERE oi.order_id=?");$items->execute([$orderId]);foreach($items as $item){if($item['item_type']==='course'&&$userId)$db->prepare('INSERT IGNORE INTO enrollments(user_id,course_id,progress) VALUES(?,?,0)')->execute([$userId,(int)$item['item_id']]);if($item['item_type']==='product'&&$item['product_type']==='physical')$this->decrementProductStock($db,(int)$item['item_id'],(int)$item['quantity'],$orderId,'Vente payée via '.$provider);if($item['item_type']==='product'&&$item['product_type']==='digital'){$raw=$this->downloadToken((int)$item['id']);$db->prepare('INSERT IGNORE INTO digital_downloads(order_id,order_item_id,product_id,token_hash,download_limit,expires_at) VALUES(?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 30 DAY))')->execute([$orderId,(int)$item['id'],(int)$item['item_id'],hash('sha256',$raw),max(1,(int)$item['download_limit'])]);}}
             $db->commit();
         }catch(\Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     }

@@ -105,3 +105,8 @@ $router->get('/admin/documents/commande', [AdminController::class, 'orderDocumen
 $router->get('/admin/documents/livraison', [AdminController::class, 'deliveryDocument']);
 $router->get('/admin/branding', [AdminController::class, 'branding']);
 $router->post('/admin/branding', [AdminController::class, 'saveBranding']);
+
+$router->get('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
+$router->get('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
+$router->post('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
+$router->post('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
