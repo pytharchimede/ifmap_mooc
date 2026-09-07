@@ -9,6 +9,7 @@ final class PdfExporter
     {
         $root = dirname(__DIR__, 2);
         $filename = self::filename($title);
+        $html = self::prepareForPdf($html);
 
         if (class_exists(\Dompdf\Dompdf::class)) {
             self::downloadWithDompdf($html, $filename, $root);
@@ -22,6 +23,53 @@ final class PdfExporter
         throw new RuntimeException('Aucun moteur PDF compatible n’est disponible. Installez les dépendances Composer (dompdf/dompdf) sur le serveur.');
     }
 
+    private static function prepareForPdf(string $html): string
+    {
+        // Les commandes de l'interface ne doivent jamais faire partie du document PDF.
+        $html = preg_replace('#<div\s+class="document-tools"[^>]*>.*?</div>#si', '', $html) ?? $html;
+
+        if (!str_contains($html, 'official-document')) {
+            return $html;
+        }
+
+        // Le diplôme doit occuper exactement une feuille A4 paysage, sans marge navigateur.
+        $pdfCss = <<<'CSS'
+<style id="ifmap-pdf-export">
+@page { size: A4 landscape; margin: 0; }
+html, body {
+    width: 297mm !important;
+    height: 210mm !important;
+    min-width: 297mm !important;
+    min-height: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: #fff !important;
+}
+body { display: block !important; }
+.document-tools { display: none !important; }
+.official-document {
+    box-sizing: border-box !important;
+    width: 297mm !important;
+    height: 210mm !important;
+    min-width: 297mm !important;
+    min-height: 210mm !important;
+    max-width: 297mm !important;
+    max-height: 210mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    transform: none !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+}
+</style>
+CSS;
+
+        return str_replace('</head>', $pdfCss . '</head>', $html);
+    }
+
     private static function downloadWithDompdf(string $html, string $filename, string $root): never
     {
         try {
@@ -29,6 +77,8 @@ final class PdfExporter
             $options->set('isRemoteEnabled', true);
             $options->set('isHtml5ParserEnabled', true);
             $options->set('defaultFont', 'DejaVu Sans');
+            $options->set('defaultMediaType', 'print');
+            $options->set('isFontSubsettingEnabled', true);
             $options->set('chroot', $root);
 
             $dompdf = new \Dompdf\Dompdf($options);
