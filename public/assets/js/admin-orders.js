@@ -9,7 +9,7 @@
     const query = normalize(search.value.trim());
     let count = 0;
     cards.forEach(card => {
-      const state = filter.value;
+      const state = query ? 'all' : filter.value;
       const matches = state === 'all' || (state === 'active' && !['completed', 'cancelled'].includes(card.dataset.status)) || (state === 'paid' && card.dataset.paid === '1') || (state === 'refund' && card.dataset.refund === '1') || (state === 'refunded' && card.dataset.payment === 'refunded') || (state === 'rejected' && card.dataset.refundStatus === 'rejected') || (['completed', 'cancelled'].includes(state) && card.dataset.status === state);
       card.hidden = !matches || !normalize(card.dataset.search).includes(query);
       if (!card.hidden) count++;
@@ -17,9 +17,11 @@
     page.querySelector('[data-order-count]').textContent = `${count} commande${count === 1 ? '' : 's'}`;
     page.querySelector('[data-order-empty]').hidden = count > 0;
   }
+  filter.value = 'active';
   search.addEventListener('input', applyFilters);
   filter.addEventListener('change', applyFilters);
-  page.querySelector('[data-order-reset]').addEventListener('click', () => { search.value = ''; filter.value = 'all'; applyFilters(); search.focus(); });
+  page.querySelector('[data-order-reset]').addEventListener('click', () => { search.value = ''; filter.value = 'active'; applyFilters(); search.focus(); });
+  applyFilters();
 
   const dialog = page.querySelector('[data-order-dialog]');
   const form = dialog.querySelector('form');
