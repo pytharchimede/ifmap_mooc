@@ -1,10 +1,5 @@
-<?php
-$script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
-$basePath = rtrim(str_replace('/index.php', '', $script), '/');
-$brandingAction = $basePath . '/admin/branding';
-?>
 <section class="admin-welcome"><div><p class="eyebrow">IDENTITÉ GLOBALE</p><h1>Branding et documents</h1><p>Le logo, le favicon, la signature et la palette sont utilisés par la plateforme et les documents officiels.</p></div><button class="btn secondary" type="button" data-reset-brand>↺ Réinitialiser les couleurs</button></section>
-<form class="branding-grid" method="post" action="<?= htmlspecialchars($brandingAction) ?>" enctype="multipart/form-data" data-brand-form>
+<form class="branding-grid" method="post" action="/admin/branding" enctype="multipart/form-data" data-brand-form>
 <div>
 <section class="panel form-panel"><div class="panel-head"><div><h3>Identité de la marque</h3><p>Glissez-déposez vos fichiers ou cliquez dans une zone pour les remplacer.</p></div></div>
 <label>Nom de la plateforme<input name="name" value="<?= htmlspecialchars($brand['name']) ?>" required></label>
