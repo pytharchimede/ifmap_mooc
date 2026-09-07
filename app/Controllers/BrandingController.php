@@ -37,13 +37,15 @@ final class BrandingController
         try {
             $columns = [];
             foreach ($db->query('SHOW COLUMNS FROM settings') as $column) {
-                $columns[$column['Field']] = true;
-            }
-            if (!isset($columns['group'])) {
-                $db->exec("ALTER TABLE settings ADD COLUMN `group` VARCHAR(80) NOT NULL DEFAULT 'general' AFTER `value`");
+                $columns[$column['Field']] = $column;
             }
             if (!isset($columns['value'])) {
                 $db->exec("ALTER TABLE settings ADD COLUMN `value` LONGTEXT NULL AFTER `key`");
+            } elseif (!str_contains(strtolower((string)$columns['value']['Type']), 'longtext')) {
+                $db->exec("ALTER TABLE settings MODIFY COLUMN `value` LONGTEXT NULL");
+            }
+            if (!isset($columns['group'])) {
+                $db->exec("ALTER TABLE settings ADD COLUMN `group` VARCHAR(80) NOT NULL DEFAULT 'general' AFTER `value`");
             }
         } catch (\Throwable $e) {
             error_log('Branding schema check: ' . $e->getMessage());
@@ -73,34 +75,27 @@ final class BrandingController
         return $brand;
     }
 
-    private function brandingDirectory(): string
+    private function brandingDirectory(): ?string
     {
         $root = dirname(__DIR__, 2);
         $uploads = $root . '/public/uploads';
         $directory = $uploads . '/branding';
 
         foreach ([$uploads, $directory] as $path) {
-            if (!is_dir($path)) {
-                @mkdir($path, 0775, true);
-            }
-            if (is_dir($path) && !is_writable($path)) {
-                @chmod($path, 0775);
-            }
-            if (is_dir($path) && !is_writable($path)) {
-                @chmod($path, 0777);
-            }
+            if (!is_dir($path)) @mkdir($path, 0775, true);
+            if (is_dir($path) && !is_writable($path)) @chmod($path, 0775);
+            if (is_dir($path) && !is_writable($path)) @chmod($path, 0777);
         }
 
-        if (!is_dir($directory)) {
-            throw new \RuntimeException('Le dossier public/uploads/branding n’a pas pu être créé automatiquement.');
-        }
-        if (!is_writable($directory)) {
-            throw new \RuntimeException('Le dossier public/uploads/branding existe mais PHP n’a pas le droit d’y écrire. Vérifiez le propriétaire du dossier sur le serveur.');
+        if (!is_dir($directory) || !is_writable($directory)) {
+            error_log('Branding storage: public/uploads/branding is not writable, database fallback enabled.');
+            return null;
         }
 
         $probe = $directory . '/.write-test-' . bin2hex(random_bytes(4));
         if (@file_put_contents($probe, 'ok', LOCK_EX) === false) {
-            throw new \RuntimeException('Le dossier public/uploads/branding n’est pas réellement accessible en écriture par PHP.');
+            error_log('Branding storage: write test failed, database fallback enabled.');
+            return null;
         }
         @unlink($probe);
         return $directory;
@@ -109,11 +104,7 @@ final class BrandingController
     public function edit(): void
     {
         $this->guard();
-        try {
-            $this->brandingDirectory();
-        } catch (\RuntimeException $e) {
-            $_SESSION['flash'] = $e->getMessage();
-        }
+        $this->brandingDirectory();
         $brand = $this->brand();
         $_SESSION['brand'] = $brand;
         View::render('admin/branding', [
@@ -127,9 +118,9 @@ final class BrandingController
     {
         $this->guard();
         $current = $this->brand();
+        $directory = $this->brandingDirectory();
 
         try {
-            $directory = $this->brandingDirectory();
             $logo = $this->store('logo', [
                 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp',
             ], 2 * 1024 * 1024, $directory) ?: $current['logo'];
@@ -171,33 +162,31 @@ final class BrandingController
             }
         } catch (\Throwable $e) {
             error_log('Branding save database: ' . $e->getMessage());
-            $_SESSION['flash'] = 'Les fichiers ont été préparés, mais les paramètres du branding n’ont pas pu être enregistrés en base de données.';
+            $_SESSION['flash'] = 'Le branding n’a pas pu être enregistré dans la base de données.';
             $this->redirect();
         }
 
         $_SESSION['brand'] = $brand;
-        $_SESSION['flash'] = 'Identité visuelle enregistrée et appliquée à la plateforme.';
+        $_SESSION['flash'] = $directory === null
+            ? 'Identité visuelle enregistrée et appliquée. Le serveur bloquant le dossier uploads, les images sont stockées automatiquement en base de données.'
+            : 'Identité visuelle enregistrée et appliquée à la plateforme.';
         $this->redirect();
     }
 
-    private function store(string $field, array $allowed, int $maxBytes, string $directory): ?string
+    private function store(string $field, array $allowed, int $maxBytes, ?string $directory): ?string
     {
-        if (!isset($_FILES[$field])) {
-            return null;
-        }
+        if (!isset($_FILES[$field])) return null;
 
         $file = $_FILES[$field];
         $error = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
-        if ($error === UPLOAD_ERR_NO_FILE) {
-            return null;
-        }
+        if ($error === UPLOAD_ERR_NO_FILE) return null;
         if ($error !== UPLOAD_ERR_OK) {
             $messages = [
                 UPLOAD_ERR_INI_SIZE => 'dépasse la taille autorisée par PHP',
                 UPLOAD_ERR_FORM_SIZE => 'dépasse la taille autorisée par le formulaire',
                 UPLOAD_ERR_PARTIAL => 'n’a été reçu que partiellement',
                 UPLOAD_ERR_NO_TMP_DIR => 'ne peut pas être traité car le dossier temporaire PHP manque',
-                UPLOAD_ERR_CANT_WRITE => 'ne peut pas être écrit sur le disque',
+                UPLOAD_ERR_CANT_WRITE => 'ne peut pas être écrit dans le dossier temporaire PHP',
                 UPLOAD_ERR_EXTENSION => 'a été bloqué par une extension PHP',
             ];
             throw new \RuntimeException('Le fichier « ' . $field . ' » ' . ($messages[$error] ?? 'n’a pas pu être téléversé') . '.');
@@ -206,12 +195,6 @@ final class BrandingController
         $tmp = (string)($file['tmp_name'] ?? '');
         if ($tmp === '' || !is_uploaded_file($tmp)) {
             throw new \RuntimeException('Le fichier temporaire « ' . $field . ' » est introuvable ou invalide.');
-        }
-        if (!is_writable($directory)) {
-            @chmod($directory, 0777);
-        }
-        if (!is_writable($directory)) {
-            throw new \RuntimeException('Le dossier de destination du branding n’est pas accessible en écriture.');
         }
 
         $size = (int)($file['size'] ?? 0);
@@ -224,19 +207,24 @@ final class BrandingController
             throw new \RuntimeException('Le format du fichier « ' . $field . ' » n’est pas accepté.');
         }
 
-        $filename = $field . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(6)) . '.' . $allowed[$mime];
-        $target = $directory . '/' . $filename;
-        if (!@move_uploaded_file($tmp, $target)) {
-            throw new \RuntimeException('Impossible d’enregistrer le fichier « ' . $field . ' » dans public/uploads/branding malgré la préparation automatique du dossier.');
+        if ($directory !== null) {
+            $filename = $field . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(6)) . '.' . $allowed[$mime];
+            $target = $directory . '/' . $filename;
+            if (@move_uploaded_file($tmp, $target)) {
+                @chmod($target, 0644);
+                if (is_file($target) && filesize($target) > 0) {
+                    return '/public/uploads/branding/' . $filename;
+                }
+                @unlink($target);
+            }
         }
-        @chmod($target, 0644);
 
-        if (!is_file($target) || filesize($target) < 1) {
-            @unlink($target);
-            throw new \RuntimeException('Le fichier « ' . $field . ' » n’a pas été correctement écrit sur le disque.');
+        /* Filesystem unavailable: keep the validated image directly in settings.value. */
+        $binary = @file_get_contents($tmp);
+        if (!is_string($binary) || $binary === '') {
+            throw new \RuntimeException('Impossible de lire le fichier « ' . $field . ' » pour le stockage de secours.');
         }
-
-        return '/public/uploads/branding/' . $filename;
+        return 'data:' . $mime . ';base64,' . base64_encode($binary);
     }
 
     private function redirect(): never
