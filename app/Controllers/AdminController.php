@@ -227,7 +227,9 @@ final class AdminController
     {
         $this->guard(); $db=Database::connection();
         $items=$db->query("SELECT *,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.name')) customer,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.email')) email,JSON_UNQUOTE(JSON_EXTRACT(customer_data,'$.phone')) phone FROM orders ORDER BY id DESC")->fetchAll();
-        foreach ($items as &$item) { $item['payments']=\App\Services\CommerceDetails::payments($db,(int)$item['id']); $item['refund']=\App\Services\CommerceDetails::refund($db,(int)$item['id']);$history=$db->prepare('SELECT status,note,created_at FROM order_status_history WHERE order_id=? ORDER BY id');$history->execute([$item['id']]);$item['history']=$history->fetchAll(); }
+        $physical=array_fill_keys($db->query("SELECT DISTINCT oi.order_id FROM order_items oi JOIN products p ON p.id=oi.item_id WHERE oi.item_type='product' AND p.product_type='physical'")->fetchAll(\PDO::FETCH_COLUMN),true);
+        $stockOut=$db->query("SELECT order_id,-SUM(quantity) quantity FROM stock_movements WHERE movement_type IN ('sale','return') GROUP BY order_id")->fetchAll(\PDO::FETCH_KEY_PAIR);
+        foreach ($items as &$item) { $item['has_physical']=isset($physical[$item['id']]);$item['stock_out']=max(0,(int)($stockOut[$item['id']]??0));$item['payments']=\App\Services\CommerceDetails::payments($db,(int)$item['id']); $item['refund']=\App\Services\CommerceDetails::refund($db,(int)$item['id']);$history=$db->prepare('SELECT status,note,created_at FROM order_status_history WHERE order_id=? ORDER BY id');$history->execute([$item['id']]);$item['history']=$history->fetchAll(); }
         unset($item);
         $_SESSION['commerce_csrf'] ??= bin2hex(random_bytes(32));
         View::render('admin/orders',['title'=>'Commandes et paiements','active'=>'admin-orders','items'=>$items],'admin');
@@ -240,7 +242,7 @@ final class AdminController
     public function updateOrderStatus(): void
     {
         $this->commerceGuard();
-        try { (new \App\Services\OrderLifecycle(Database::connection()))->updateStatus((int)($_POST['id']??0),(string)($_POST['status']??''),mb_substr(trim((string)($_POST['note']??'')),0,255)); $_SESSION['flash']='Statut logistique mis à jour.'; }
+        try { (new \App\Services\OrderLifecycle(Database::connection()))->updateStatus((int)($_POST['id']??0),(string)($_POST['status']??''),mb_substr(trim((string)($_POST['note']??'')),0,255)); $_SESSION['flash']=($_POST['status']??'')==='cancelled'?'Commande annulée. Le motif est enregistré ; le paiement et le stock sont conservés.':'Statut logistique mis à jour.'; }
         catch (\Throwable $e) { $_SESSION['flash']=$e->getMessage(); }
         $this->redirect('/admin/commandes');
     }
@@ -255,6 +257,7 @@ final class AdminController
             switch ($_POST['action'] ?? '') {
                 case 'request_refund': $service->requestRefund($id,$note); break;
                 case 'complete_refund': $service->completeRefund($id,$reference,$method,$note); break;
+                case 'reject_refund': $service->rejectRefund($id,$note); break;
                 case 'receive_return': $service->receiveReturn($id,$note); break;
                 case 'receive_return_damaged': $service->receiveReturn($id,$note,false); break;
                 case 'collect_cod':
@@ -264,7 +267,7 @@ final class AdminController
                     break;
                 default: throw new \RuntimeException('Action inconnue.');
             }
-            $_SESSION['flash']='Opération enregistrée. Aucun transfert d’argent automatique n’a été effectué.';
+            $_SESSION['flash']=match($_POST['action']??''){'request_refund'=>'Demande de remboursement enregistrée.','reject_refund'=>'Demande de remboursement refusée. Le motif est conservé dans l’historique.','complete_refund'=>'Remboursement exécuté enregistré avec sa référence.','collect_cod'=>'Encaissement enregistré. La commande est payée.','receive_return'=>'Retour reçu et remise en stock enregistrés.','receive_return_damaged'=>'Retour reçu sans remise en stock.',default=>'Opération enregistrée.'};
         } catch (\Throwable $e) { $_SESSION['flash']=$e->getMessage(); }
         $this->redirect('/admin/commandes');
     }

@@ -106,3 +106,35 @@ Le second utilise uniquement des tables MySQL temporaires propres à sa connexio
 pour tester la migration, les paiements cours/produits, les reçus, la livraison,
 le retour, le remboursement, les notifications tardives, les répétitions et le
 rollback en cas de stock insuffisant. Aucun paiement réel n’est exécuté.
+
+
+### Page administrative des commandes
+
+`/admin/commandes` affiche les commandes sous forme de cartes adaptées au mobile,
+avec indicateurs, recherche (client, commande, téléphone, transaction ou remboursement)
+et filtres pour le traitement, l’annulation et les remboursements. Les actions
+proposées dépendent du paiement et de la logistique. Les reçus et l’historique sont
+repliables. Une fenêtre dédiée précise les effets et les champs requis de chaque action.
+
+Le bouton « Annuler la commande » demande un motif, conservé dans l’historique.
+L’annulation est possible même après livraison, sans réintégration automatique du
+stock ni remboursement fictif. Elle retire les accès numériques attachés à cet
+achat tout en conservant les droits issus d’un autre achat valide. Une commande
+annulée ne peut pas être remise en préparation. Une opération répétée ne répète
+pas les mouvements. Un retour ou remboursement reste une opération distincte.
+
+Une demande de remboursement peut être refusée avec un motif, puis réexaminée.
+Le montant, les motifs, les dates et la référence du remboursement exécuté sont
+visibles dans son suivi. Aucun transfert de fonds automatique n’est déclenché.
+Les retours et remboursements partiels restent hors de ce parcours intégral.
+
+Vérifications supplémentaires :
+- `php tests/commerce-actions.php` : 19 scénarios sur les routes et contrôleurs,
+  y compris documents, export, champs manquants, état obsolète, contrôle CSRF et accès administrateur.
+- `IFMAP_TEST_HTML_PATH=/tmp/ifmap-orders-test.html php tests/commerce-lifecycle.php`
+  génère une page administrative avec uniquement des données temporaires fictives.
+- `node tests/admin-orders-browser.cjs` vérifie recherche, filtres, boutons,
+  validations, requêtes POST, fenêtres et affichage mobile. Playwright doit être
+  disponible (`IFMAP_PLAYWRIGHT_PATH` peut indiquer son module local et
+  `IFMAP_CHROME_PATH` un exécutable Chrome). Les envois sont interceptés : aucune
+  commande réelle n’est modifiée. Les captures sont enregistrées dans `/tmp`.

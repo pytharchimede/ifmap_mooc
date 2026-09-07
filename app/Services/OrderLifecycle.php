@@ -32,8 +32,9 @@ final class OrderLifecycle
         $this->transaction(function () use ($id,$status,$note) {
             $order = $this->order($id);
             if ($status === $order['status']) return;
+            if ($status === 'cancelled' && mb_strlen(trim($note)) < 5) throw new RuntimeException('Indiquez un motif d’annulation d’au moins 5 caractères.');
             if ($order['returned_at'] && $status !== 'cancelled') throw new RuntimeException('Une commande retournée ne peut pas être livrée de nouveau.');
-            $allowed = ['pending'=>['processing','cancelled'], 'paid'=>['processing','shipping','completed','cancelled'], 'processing'=>['shipping','completed','cancelled'], 'shipping'=>['completed','cancelled'], 'completed'=>[], 'cancelled'=>[]];
+            $allowed = ['pending'=>['processing','cancelled'], 'paid'=>['processing','shipping','completed','cancelled'], 'processing'=>['shipping','completed','cancelled'], 'shipping'=>['completed','cancelled'], 'completed'=>['cancelled'], 'cancelled'=>[]];
             if (!in_array($status, $allowed[$order['status']] ?? [], true)) throw new RuntimeException('Transition de commande non autorisée. Une annulation ne constitue pas un remboursement.');
             if (in_array($status,['processing','shipping','completed'],true) && !in_array($order['payment_status'],['paid','cod'],true)) throw new RuntimeException('Le paiement doit être confirmé avant la préparation.');
             if ($status === 'completed') {
@@ -42,6 +43,7 @@ final class OrderLifecycle
                 $this->db->prepare('UPDATE orders SET delivered_at=NOW() WHERE id=?')->execute([$id]);
             }
             $this->db->prepare('UPDATE orders SET status=? WHERE id=?')->execute([$status,$id]);
+            if ($status === 'cancelled') $this->revokeAccess($id,false);
             $this->history($id,$status,$note ?: 'Statut logistique mis à jour');
         });
     }
@@ -86,8 +88,30 @@ final class OrderLifecycle
         $this->transaction(function () use ($id,$reason) {
             $order = $this->order($id);
             if ($order['payment_status'] !== 'paid' || (float)$order['total'] <= 0) throw new RuntimeException('Seule une commande encaissée peut être remboursée.');
-            $this->db->prepare("INSERT IGNORE INTO order_refunds(order_id,amount,reason) VALUES(?,?,?)")->execute([$id,$order['total'],$reason]);
-            $this->history($id,$order['status'],'Demande de remboursement intégral enregistrée');
+            $stmt=$this->db->prepare('SELECT status FROM order_refunds WHERE order_id=? FOR UPDATE');$stmt->execute([$id]);$current=$stmt->fetchColumn();
+            if ($current === 'requested') return;
+            if ($current === 'completed') throw new RuntimeException('Cette commande a déjà été remboursée.');
+            if ($current === 'rejected') $this->db->prepare("UPDATE order_refunds SET status='requested',reason=?,requested_at=NOW(),admin_note=NULL WHERE order_id=?")->execute([$reason,$id]);
+            else $this->db->prepare("INSERT INTO order_refunds(order_id,amount,reason) VALUES(?,?,?)")->execute([$id,$order['total'],$reason]);
+            $this->history($id,$order['status'],'Demande de remboursement intégral : '.$reason);
+        });
+    }
+
+    private function revokeAccess(int $id, bool $refunded): void
+    {
+        $this->db->prepare("UPDATE enrollments SET status='cancelled',payment_status=IF(?,'refunded',payment_status) WHERE order_id=?")->execute([$refunded?1:0,$id]);
+        $this->db->prepare("UPDATE enrollments e JOIN (SELECT o.user_id,oi.item_id,MAX(o.id) other_id FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.payment_status='paid' AND o.status<>'cancelled' AND oi.item_type='course' GROUP BY o.user_id,oi.item_id) x ON x.user_id=e.user_id AND x.item_id=e.course_id SET e.order_id=x.other_id,e.payment_status='paid',e.status=IF(e.completed_at IS NULL,'active','completed') WHERE e.order_id=?")->execute([$id]);
+    }
+
+    public function rejectRefund(int $id, string $reason): void
+    {
+        if (mb_strlen(trim($reason)) < 5) throw new RuntimeException('Précisez le motif de refus du remboursement.');
+        $this->transaction(function () use ($id,$reason) {
+            $order=$this->order($id);
+            $stmt=$this->db->prepare("UPDATE order_refunds SET status='rejected',admin_note=? WHERE order_id=? AND status='requested'");
+            $stmt->execute([$reason,$id]);
+            if (!$stmt->rowCount()) throw new RuntimeException('Aucune demande de remboursement en attente pour cette commande.');
+            $this->history($id,$order['status'],'Remboursement refusé : '.$reason);
         });
     }
 
@@ -103,9 +127,7 @@ final class OrderLifecycle
             $this->db->prepare("UPDATE order_refunds SET status='completed',reference=?,method=?,admin_note=?,completed_at=NOW() WHERE order_id=?")->execute([$reference,$method,$note,$id]);
             $this->db->prepare("UPDATE orders SET payment_status='refunded',status='cancelled' WHERE id=?")->execute([$id]);
             $this->db->prepare("UPDATE payments SET status='refunded' WHERE order_id=? AND status='successful'")->execute([$id]);
-            $this->db->prepare("UPDATE enrollments SET payment_status='refunded',status='cancelled' WHERE order_id=?")->execute([$id]);
-            // Restore access if a separate, non-refunded purchase still covers the course.
-            $this->db->prepare("UPDATE enrollments e JOIN (SELECT o.user_id,oi.item_id,MAX(o.id) other_id FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.payment_status='paid' AND o.status<>'cancelled' AND oi.item_type='course' GROUP BY o.user_id,oi.item_id) x ON x.user_id=e.user_id AND x.item_id=e.course_id SET e.order_id=x.other_id,e.payment_status='paid',e.status=IF(e.completed_at IS NULL,'active','completed') WHERE e.order_id=?")->execute([$id]);
+            $this->revokeAccess($id,true);
             $this->history($id,'cancelled','Remboursement intégral exécuté : '.$reference.' / '.$method);
         });
     }

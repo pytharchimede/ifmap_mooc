@@ -77,8 +77,45 @@ check(value('SELECT status FROM enrollments WHERE user_id=1 AND course_id=1')===
 order(8,'pending',false);$db->exec('UPDATE products SET stock_quantity=5 WHERE id=1');$controller->finalizePaidOrder(8,$verification,'paiementpro');$service->updateStatus(8,'completed','Remis');$service->receiveReturn(8,'Article endommagé',false);$service->receiveReturn(8,'Repeat',true);
 check((int)value('SELECT stock_quantity FROM products WHERE id=1')===4,'Damaged return never restocks');
 rejects(fn()=>$service->updateStatus(8,'shipping','Cannot redeliver returned goods'));
+// Cancellation is allowed at each stage, records its reason and never fabricates a refund/return.
+foreach (['pending','paid','processing','shipping','completed'] as $index=>$stage) {
+    $id=20+$index;order($id,'pending',false);
+    if ($stage!=='pending') $controller->finalizePaidOrder($id,$verification,'paiementpro');
+    $db->prepare('UPDATE orders SET status=? WHERE id=?')->execute([$stage,$id]);
+    $stockBefore=(int)value('SELECT stock_quantity FROM products WHERE id=1');
+    rejects(fn()=>$service->updateStatus($id,'cancelled',''));
+    $service->updateStatus($id,'cancelled','Annulation demandée par le client');
+    $historyBefore=(int)value('SELECT COUNT(*) FROM order_status_history WHERE order_id='.$id);
+    $service->updateStatus($id,'cancelled','Deuxième clic');
+    check(value('SELECT status FROM orders WHERE id='.$id)==='cancelled','Cancellation allowed at '.$stage);
+    check(value('SELECT payment_status FROM orders WHERE id='.$id)===($stage==='pending'?'pending':'paid'),'Cancellation preserves payment at '.$stage);
+    check((int)value('SELECT stock_quantity FROM products WHERE id=1')===$stockBefore,'Cancellation preserves stock at '.$stage);
+    check((int)value('SELECT COUNT(*) FROM order_status_history WHERE order_id='.$id)===$historyBefore,'Repeat cancellation is idempotent');
+    rejects(fn()=>$service->updateStatus($id,'processing','Cannot reopen cancelled order'));
+}
+order(30);$controller->finalizePaidOrder(30,$verification,'paiementpro');
+$service->requestRefund(30,'Demande à examiner');$historyBefore=(int)value('SELECT COUNT(*) FROM order_status_history WHERE order_id=30');$service->requestRefund(30,'Deuxième clic');
+check((int)value('SELECT COUNT(*) FROM order_status_history WHERE order_id=30')===$historyBefore,'Refund request is idempotent');
+rejects(fn()=>$service->rejectRefund(30,''));$service->rejectRefund(30,'Demande non justifiée');
+check(value('SELECT status FROM order_refunds WHERE order_id=30')==='rejected','Refund rejection recorded');
+check(value('SELECT payment_status FROM orders WHERE id=30')==='paid','Refund rejection preserves payment');
+rejects(fn()=>$service->completeRefund(30,'REFUSED','Mobile Money','Cannot complete rejected refund'));
+$service->requestRefund(30,'Nouvel examen avec justificatif');
+check(value('SELECT status FROM order_refunds WHERE order_id=30')==='requested','Rejected refund can be reconsidered');
+order(31,'cod',false);$service->updateStatus(31,'processing','Préparation');$service->updateStatus(31,'shipping','Expédiée');
+rejects(fn()=>$service->updateStatus(31,'completed','Unpaid COD cannot complete'));
+// Cancelled paid course loses access but retains valid alternate purchase.
+$service->updateStatus(30,'cancelled','Annulation de cet achat');
+check((int)value('SELECT order_id FROM enrollments WHERE user_id=1 AND course_id=1')===6,'Cancellation preserves alternate paid course access');
+$db->exec("INSERT INTO courses(id,title,price,status) VALUES(2,'Cours annulé',1000,'published')");order(32,'pending',false);
+$db->exec("INSERT INTO order_items(order_id,item_type,item_id,label,quantity,unit_price,total) VALUES(32,'course',2,'Cours annulé',1,1000,1000)");
+$controller->finalizePaidOrder(32,$verification,'paiementpro');$service->updateStatus(32,'cancelled','Cours annulé par le client');
+check(value('SELECT status FROM enrollments WHERE course_id=2')==='cancelled','Cancellation revokes sole course access');
+check(value('SELECT payment_status FROM enrollments WHERE course_id=2')==='paid','Cancellation does not pretend course was refunded');
+order(33,'pending',false);$controller->finalizePaidOrder(33,$verification,'paiementpro');$service->updateStatus(33,'processing','Préparation');
 $_SESSION=['admin_authenticated'=>true,'user'=>['id'=>1,'name'=>'Test','role'=>'learner']];
 ob_start();(new App\Controllers\AdminController())->orders();$html=ob_get_clean();
+if($fixture=getenv('IFMAP_TEST_HTML_PATH'))file_put_contents($fixture,$html);
 check(str_contains($html,'OP-123')&&str_contains($html,'0711111111')&&str_contains($html,'REFUND-123'),'Admin renders payment and refund evidence');
 $db->exec("UPDATE courses SET category='Test',duration_label='1 h',tone='green' WHERE id=1");
 ob_start();(new App\Controllers\DashboardController())->course();$html=ob_get_clean();
