@@ -110,3 +110,7 @@ $router->get('/paiement/paiementpro/retour', [SiteController::class, 'paiementPr
 $router->get('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
 $router->post('/paiement/paiementpro/retour', [SiteController::class, 'paiementProReturn']);
 $router->post('/paiement/paiementpro/notification', [SiteController::class, 'paiementProNotify']);
+
+$router->post('/admin/commandes/action', [AdminController::class, 'orderAction']);
+$router->get('/conditions-generales', [SiteController::class, 'terms']);
+$router->get('/retours-remboursements', [SiteController::class, 'refundPolicy']);

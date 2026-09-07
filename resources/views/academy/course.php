@@ -1,3 +1,4 @@
+<?php if(!empty($enrollment)): ?><p class="panel" style="padding:14px"><strong><?= htmlspecialchars(\App\Services\CommerceDetails::label($enrollment['payment_status']??'unpaid')) ?></strong> · <a href="/cours">Retrouver le reçu dans Mes formations</a></p><?php endif ?>
 <?php
 $previewMode = !empty($previewMode); $completedLessons = $completedLessons ?? []; $progress = (int) ($enrollment['progress'] ?? 0);
 $lessonHref = static fn(array $lesson): string => $previewMode ? '/admin/cours/apercu-lecon?id='.(int)$lesson['id'] : '/academie/lecon?id='.(int)$lesson['id'];
