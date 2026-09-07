@@ -304,7 +304,7 @@ final class AdminController
     public function orderDocument(): void { $this->renderOrderDocument('order'); }
     public function deliveryDocument(): void { $this->renderOrderDocument('delivery'); }
     private function renderOrderDocument(string $type): void { $this->guard();$id=(int)($_GET['id']??0);$db=Database::connection();$stmt=$db->prepare('SELECT * FROM orders WHERE id=?');$stmt->execute([$id]);$order=$stmt->fetch();if(!$order){http_response_code(404);return;}$order['payments']=\App\Services\CommerceDetails::payments($db,$id);$order['refund']=\App\Services\CommerceDetails::refund($db,$id);$stmt=$db->prepare('SELECT oi.*,p.product_type FROM order_items oi LEFT JOIN products p ON p.id=oi.item_id AND oi.item_type="product" WHERE oi.order_id=? ORDER BY oi.id');$stmt->execute([$id]);$items=$stmt->fetchAll();if($type==='delivery')$items=array_values(array_filter($items,fn($item)=>$item['item_type']==='product'&&($item['product_type']??'physical')==='physical'));View::render('admin/order-document',['title'=>$type==='delivery'?'Bon de livraison':'Bon de commande','order'=>$order,'items'=>$items,'documentType'=>$type,'brand'=>$this->documentBrand($db)],'document'); }
-    private function documentBrand(\PDO $db): array { $brand=['name'=>'IFMAP','primary'=>'#123f3a','accent'=>'#d89b2b','logo'=>null,'signature'=>null];foreach($db->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row)if(array_key_exists($row['key'],$brand))$brand[$row['key']]=$row['value'];return $brand; }
+    private function documentBrand(\PDO $db): array { $brand=['name'=>'IFMAP','primary'=>'#123f3a','accent'=>'#d89b2b','logo'=>null,'favicon'=>null,'signature'=>null];foreach($db->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row)if(array_key_exists($row['key'],$brand))$brand[$row['key']]=$row['value'];return $brand; }
     private function savePrerequisites(\PDO $db, int $courseId): void
     {
         $db->prepare('DELETE FROM course_prerequisites WHERE course_id=?')->execute([$courseId]);
@@ -382,22 +382,27 @@ final class AdminController
     }
 
     private function redirect(string $path): never { header('Location: '.$this->baseUrl($path)); exit; }
-    public function branding(): void { $this->guard();$brand=['name'=>'IFMAP Learning','primary'=>'#5547e8','accent'=>'#f59e0b','logo'=>null,'signature'=>null];try{foreach(Database::connection()->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row)if(array_key_exists($row['key'],$brand))$brand[$row['key']]=$row['value'];}catch(\Throwable){}$_SESSION['brand']=$brand;View::render('admin/branding', ['title'=>'Identité visuelle','active'=>'admin-branding','brand'=>$brand], 'admin'); }
+    public function branding(): void { $this->guard();$brand=['name'=>'IFMAP Learning','primary'=>'#5547e8','accent'=>'#f59e0b','logo'=>null,'favicon'=>null,'signature'=>null];try{foreach(Database::connection()->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row)if(array_key_exists($row['key'],$brand))$brand[$row['key']]=$row['value'];}catch(\Throwable){}$_SESSION['brand']=$brand;View::render('admin/branding', ['title'=>'Identité visuelle','active'=>'admin-branding','brand'=>$brand], 'admin'); }
     public function saveBranding(): void {
         $this->guard();
-        $logo=$_SESSION['brand']['logo']??null;
-        if(!empty($_FILES['logo']['tmp_name'])&&is_uploaded_file($_FILES['logo']['tmp_name'])){$allowed=['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($_FILES['logo']['tmp_name']);if(!isset($allowed[$mime])||(int)$_FILES['logo']['size']>2*1024*1024){$_SESSION['flash']='Logo invalide : JPG, PNG ou WebP, 2 Mo maximum.';$this->redirect('/admin/branding');}$directory=dirname(__DIR__,2).'/public/uploads/branding';if(!is_dir($directory)&&!mkdir($directory,0775,true)&&!is_dir($directory)){$_SESSION['flash']='Impossible de créer le dossier du branding.';$this->redirect('/admin/branding');}$filename='logo-'.date('YmdHis').'-'.bin2hex(random_bytes(5)).'.'.$allowed[$mime];if(!move_uploaded_file($_FILES['logo']['tmp_name'],$directory.'/'.$filename)){$_SESSION['flash']='Impossible d’enregistrer le logo.';$this->redirect('/admin/branding');}$logo='/public/uploads/branding/'.$filename;}
-        $signature=$_SESSION['brand']['signature']??null;
-        if(!empty($_FILES['signature']['tmp_name'])&&is_uploaded_file($_FILES['signature']['tmp_name'])){$allowed=['image/jpeg'=>'jpg','image/png'=>'png'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($_FILES['signature']['tmp_name']);if(!isset($allowed[$mime])||(int)$_FILES['signature']['size']>2*1024*1024){$_SESSION['flash']='Signature invalide : JPG ou PNG, 2 Mo maximum.';$this->redirect('/admin/branding');}$directory=dirname(__DIR__,2).'/public/uploads/branding';if(!is_dir($directory)&&!mkdir($directory,0775,true)&&!is_dir($directory)){$_SESSION['flash']='Impossible de créer le dossier du branding.';$this->redirect('/admin/branding');}$filename='signature-'.date('YmdHis').'-'.bin2hex(random_bytes(5)).'.'.$allowed[$mime];if(!move_uploaded_file($_FILES['signature']['tmp_name'],$directory.'/'.$filename)){$_SESSION['flash']='Impossible d’enregistrer la signature.';$this->redirect('/admin/branding');}$signature='/public/uploads/branding/'.$filename;}
+        $current = array_merge(['logo'=>null,'favicon'=>null,'signature'=>null], $_SESSION['brand'] ?? []);
+        $directory=dirname(__DIR__,2).'/public/uploads/branding';if(!is_dir($directory)&&!mkdir($directory,0775,true)&&!is_dir($directory)){$_SESSION['flash']='Impossible de créer le dossier du branding.';$this->redirect('/admin/branding');}
+        $storeImage=function(string $field,array $allowed,int $max,string $prefix) use($directory){if(empty($_FILES[$field]['tmp_name'])||!is_uploaded_file($_FILES[$field]['tmp_name']))return null;$file=$_FILES[$field];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);if(!isset($allowed[$mime])||(int)$file['size']>$max){throw new \RuntimeException('Fichier '.$field.' invalide.');}$filename=$prefix.'-'.date('YmdHis').'-'.bin2hex(random_bytes(5)).'.'.$allowed[$mime];if(!move_uploaded_file($file['tmp_name'],$directory.'/'.$filename))throw new \RuntimeException('Impossible d’enregistrer '.$field.'.');return '/public/uploads/branding/'.$filename;};
+        try {
+            $logo=$storeImage('logo',['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'],2*1024*1024,'logo') ?: $current['logo'];
+            $favicon=$storeImage('favicon',['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/x-icon'=>'ico','image/vnd.microsoft.icon'=>'ico'],1024*1024,'favicon') ?: $current['favicon'];
+            $signature=$storeImage('signature',['image/jpeg'=>'jpg','image/png'=>'png'],2*1024*1024,'signature') ?: $current['signature'];
+        } catch (\RuntimeException $e) { $_SESSION['flash']=$e->getMessage();$this->redirect('/admin/branding'); }
         $_SESSION['brand'] = [
             'name'=>trim($_POST['name'] ?? 'IFMAP Learning'),
             'primary'=>preg_match('/^#[0-9a-f]{6}$/i', $_POST['primary'] ?? '') ? $_POST['primary'] : '#5547e8',
             'accent'=>preg_match('/^#[0-9a-f]{6}$/i', $_POST['accent'] ?? '') ? $_POST['accent'] : '#f59e0b',
             'logo'=>$logo,
+            'favicon'=>$favicon,
             'signature'=>$signature,
         ];
         $stmt=Database::connection()->prepare("INSERT INTO settings(`key`,`value`,`group`) VALUES(?,?,'branding') ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)");foreach($_SESSION['brand'] as $key=>$value)$stmt->execute([$key,$value]);
-        $_SESSION['flash'] = 'Identité visuelle mise à jour avec succès.';
+        $_SESSION['flash'] = 'Identité visuelle globale mise à jour avec succès.';
         header('Location: ' . $this->baseUrl('/admin/branding')); exit;
     }
 }
