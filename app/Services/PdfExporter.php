@@ -7,6 +7,14 @@ final class PdfExporter
 {
     public static function download(string $html, string $title): never
     {
+        $official = self::officialPayload($html);
+        if ($official !== null) {
+            if (!class_exists(\TCPDF::class)) {
+                throw new RuntimeException('TCPDF est requis pour les diplômes et attestations. Exécutez composer update tecnickcom/tcpdf puis réessayez.');
+            }
+            OfficialPdfBridge::download($official);
+        }
+
         $root = dirname(__DIR__, 2);
         $filename = self::filename($title);
         $html = self::prepareForPdf($html);
@@ -20,7 +28,24 @@ final class PdfExporter
             self::downloadWithBrowser($html, $filename, $root, $browser);
         }
 
-        throw new RuntimeException('Aucun moteur PDF compatible n’est disponible. Installez les dépendances Composer (dompdf/dompdf) sur le serveur.');
+        throw new RuntimeException('Aucun moteur PDF compatible n’est disponible. Installez les dépendances Composer sur le serveur.');
+    }
+
+    private static function officialPayload(string $html): ?array
+    {
+        if (!preg_match('/data-official-pdf="([^"]+)"/', $html, $match)) {
+            return null;
+        }
+        $encoded = html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $json = base64_decode($encoded, true);
+        if (!is_string($json) || $json === '') {
+            throw new RuntimeException('Les données du document officiel sont invalides.');
+        }
+        $payload = json_decode($json, true);
+        if (!is_array($payload) || empty($payload['type']) || !is_array($payload['data'] ?? null)) {
+            throw new RuntimeException('Les données du document officiel sont incomplètes.');
+        }
+        return $payload;
     }
 
     private static function prepareForPdf(string $html): string
@@ -32,7 +57,7 @@ final class PdfExporter
             return $html;
         }
 
-        // Le diplôme doit occuper exactement une feuille A4 paysage, sans marge navigateur.
+        // Fallback Dompdf uniquement pour les documents non routés vers TCPDF.
         $pdfCss = <<<'CSS'
 <style id="ifmap-pdf-export">
 @page { size: A4 landscape; margin: 0; }
