@@ -5,7 +5,7 @@ final class View
 {
     public static function render(string $view, array $data = [], string $layout = 'app'): void
     {
-        $brand = ['name'=>'IFMAP Learning','primary'=>'#5547e8','accent'=>'#f59e0b','logo'=>null,'signature'=>null];
+        $brand = ['name'=>'IFMAP Learning','primary'=>'#5547e8','accent'=>'#f59e0b','logo'=>null,'favicon'=>null,'signature'=>null];
         try {
             foreach (Database::connection()->query("SELECT `key`,`value` FROM settings WHERE `group`='branding'") as $row) {
                 if (array_key_exists($row['key'], $brand)) $brand[$row['key']] = $row['value'];
@@ -29,6 +29,13 @@ final class View
         ob_start();
         require dirname(__DIR__, 2) . '/resources/views/layouts/' . $layout . '.php';
         $page = ob_get_clean();
+        if (in_array($layout, ['site','app','admin','auth','customer-auth'], true)) {
+            $favicon = $brand['favicon'] ?: $brand['logo'];
+            if (!empty($favicon)) {
+                $tag = '<link rel="icon" href="'.htmlspecialchars($favicon, ENT_QUOTES, 'UTF-8').'">';
+                $page = str_replace('</head>', $tag.'</head>', $page);
+            }
+        }
         if ($layout === 'site') {
             $mark = !empty($brand['logo']) ? '<img src="'.htmlspecialchars($brand['logo'], ENT_QUOTES, 'UTF-8').'" alt="" style="width:100%;height:100%;object-fit:contain">' : 'IF';
             $siteLogo = '<span>'.$mark.'</span><strong>'.htmlspecialchars($brand['name'], ENT_QUOTES, 'UTF-8').'<small>Institut de Formation aux Métiers</small></strong>';
