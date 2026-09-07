@@ -1,0 +1,37 @@
+/* Final branding polish: always loaded after legacy and branding layers. */
+
+/* Home illustrative needs cards */
+.path-illustration{position:relative;display:grid!important;place-items:center!important;overflow:hidden;background:var(--site-primary)!important;background-image:none!important}
+.path-illustration:before{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:color-mix(in srgb,var(--site-accent) 16%,transparent);right:-45px;bottom:-55px}
+.path-illustration:after{content:"";position:absolute;width:90px;height:90px;border-radius:50%;border:1px solid #ffffff28;left:-35px;top:-28px}
+.path-illustration .path-number{position:absolute!important;left:16px;top:15px;z-index:3;width:34px!important;height:34px!important;border-radius:11px!important;display:grid!important;place-items:center!important;background:var(--site-accent)!important;color:#171717!important;font:800 10px Manrope,Arial,sans-serif!important}
+.path-modern-icon{position:relative!important;z-index:2!important;width:78px!important;height:78px!important;border-radius:23px!important;display:grid!important;place-items:center!important;background:#ffffff16!important;color:#fff!important;border:1px solid #ffffff28!important;box-shadow:0 18px 38px #0002!important;backdrop-filter:blur(8px)}
+.path-modern-icon svg{width:38px;height:38px;display:block}
+.path-card:hover .path-modern-icon{transform:translateY(-4px) scale(1.04);background:var(--site-accent)!important;color:#171717!important;border-color:var(--site-accent)!important}
+.path-modern-icon{transition:transform .22s ease,background .22s ease,color .22s ease,border-color .22s ease}
+
+/* Modern share action shared by formations and products */
+.catalog-share-button,.modern-share-button{appearance:none!important;border:1px solid color-mix(in srgb,var(--site-accent) 55%,transparent)!important;background:rgba(255,255,255,.12)!important;color:#fff!important;border-radius:999px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:10px!important;min-height:48px!important;padding:7px 18px 7px 8px!important;cursor:pointer!important;box-shadow:0 14px 35px rgba(0,0,0,.14)!important;backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px)!important;transition:transform .2s ease,background .2s ease,box-shadow .2s ease,border-color .2s ease!important;font-family:Manrope,Arial,sans-serif!important}
+.catalog-share-button:hover,.modern-share-button:hover{transform:translateY(-3px)!important;background:#fff!important;color:var(--site-primary)!important;border-color:#fff!important;box-shadow:0 18px 44px rgba(0,0,0,.2)!important}
+.catalog-share-icon,.modern-share-icon{width:36px!important;height:36px!important;border-radius:50%!important;display:grid!important;place-items:center!important;background:var(--site-accent)!important;color:#171717!important;flex:0 0 36px!important;box-shadow:0 8px 18px color-mix(in srgb,var(--site-accent) 28%,transparent)!important}
+.catalog-share-icon svg,.modern-share-icon svg{width:18px!important;height:18px!important;display:block!important}
+.catalog-share-copy{display:flex!important;flex-direction:column!important;align-items:flex-start!important;line-height:1.05!important}
+.catalog-share-copy strong{font-size:11px!important;font-weight:800!important;color:inherit!important}.catalog-share-copy small{font-size:7px!important;margin-top:4px!important;color:inherit!important;opacity:.72!important;font-weight:700!important;letter-spacing:.2px!important}
+.catalog-share-feedback,.share-feedback{min-height:18px;margin-top:8px;font-size:9px;font-weight:800;color:var(--site-accent);opacity:0;transform:translateY(-3px);transition:.18s}.catalog-share-feedback.show,.share-feedback.show{opacity:1;transform:none}
+.product-topline{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}.modern-share-button.compact{background:color-mix(in srgb,var(--site-primary) 8%,white)!important;color:var(--site-primary)!important;border-color:color-mix(in srgb,var(--site-primary) 22%,transparent)!important;box-shadow:none!important;min-height:44px!important;padding-right:15px!important;font-size:10px!important;font-weight:800!important}.modern-share-button.compact:hover{background:var(--site-primary)!important;color:#fff!important;border-color:var(--site-primary)!important;box-shadow:0 12px 28px color-mix(in srgb,var(--site-primary) 22%,transparent)!important}
+
+/* Force every shop hover state to use the configured brand instead of legacy green. */
+.modern-product-card:hover,.product-card:hover{border-color:color-mix(in srgb,var(--site-primary) 42%,#dfe4e2)!important;box-shadow:0 20px 48px color-mix(in srgb,var(--site-primary) 14%,transparent)!important}
+.modern-product-card:hover h2,.modern-product-card:hover h2 a,.product-card:hover h2,.product-card:hover h2 a,.modern-product-card footer a,.product-card footer a,.product-detail a:not(.site-btn):not(.breadcrumbs){color:var(--site-primary)!important}
+.modern-product-card .product-cta,.product-card footer a{transition:.2s!important}.modern-product-card:hover .product-cta,.modern-product-card .product-cta:hover{background:var(--site-primary)!important;color:#fff!important;border-color:var(--site-primary)!important}
+.product-image:hover,.product-main-photo,.related-products .product-image{background-color:var(--site-primary)!important;background-image:none!important}
+.stock.in,.promo-pill{color:var(--site-primary)!important;border-color:color-mix(in srgb,var(--site-primary) 30%,#e5e8e6)!important;background:color-mix(in srgb,var(--site-primary) 7%,white)!important}
+.thumbs button:hover,.thumbs button.active{border-color:var(--site-accent)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--site-accent) 20%,transparent)!important}
+
+/* Branding admin spacing and previews */
+[data-brand-form] .form-panel>label:first-of-type{display:block!important;margin-bottom:30px!important}
+[data-brand-form] .form-panel>label:first-of-type input{margin-top:8px!important}
+[data-brand-form] .brand-drop-grid{margin-top:6px!important}
+.brand-drop-preview img,.brand-document-preview img{display:block!important;max-width:100%!important;object-fit:contain!important}
+
+@media(max-width:700px){.catalog-hero-topline{align-items:flex-start!important}.catalog-share-copy small{display:none}.catalog-share-button{padding-right:12px!important}.product-topline{align-items:flex-start;flex-direction:column}.modern-share-button.compact{align-self:flex-start}.path-modern-icon{width:68px!important;height:68px!important}}
