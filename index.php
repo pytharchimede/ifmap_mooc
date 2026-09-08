@@ -29,6 +29,8 @@ App\Core\Bootstrap::run(__DIR__);
 $router = new Router();
 require __DIR__ . '/routes/web.php';
 require __DIR__ . '/routes/seo_analytics.php';
+require __DIR__ . '/routes/mentorship.php';
+require __DIR__ . '/routes/auth_communications.php';
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
 $basePath = rtrim(str_replace('/index.php', '', $scriptName), '/');
@@ -53,7 +55,7 @@ if (!empty($_SESSION['user']['name'])) {
     }
 }
 
-if (!str_starts_with($requestPath, '/admin') && !str_starts_with($requestPath, '/academie') && !in_array($requestPath, ['/connexion','/inscription','/activation','/profil','/commande'], true) && str_contains($html, '</head>')) {
+if (!str_starts_with($requestPath, '/admin') && !str_starts_with($requestPath, '/academie') && !in_array($requestPath, ['/connexion','/inscription','/activation','/profil','/commande','/mot-de-passe-oublie','/reinitialiser-mot-de-passe'], true) && str_contains($html, '</head>')) {
     $fallbackTitle='IFMAP Learning';
     if (preg_match('/<title>(.*?)<\/title>/is',$html,$m)) $fallbackTitle=trim(html_entity_decode(strip_tags($m[1]),ENT_QUOTES,'UTF-8')) ?: $fallbackTitle;
     $brandName=(string)($_SESSION['brand']['name']??'IFMAP Learning');
@@ -71,9 +73,11 @@ $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/rich-editor.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/news.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/seo-analytics.css?v=1"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/mentorship.css?v=1"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/auth-communications.css?v=1"></head>', $html);
 /* Must stay last so legacy styles cannot reintroduce old green states. */
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/branding-polish.css?v=20260907-1"></head>', $html);
-$html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script><script src="/public/assets/js/seo-analytics.js?v=1"></script></body>', $html);
+$html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script><script src="/public/assets/js/seo-analytics.js?v=1"></script><script src="/public/assets/js/mentorship.js?v=1"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(
         ['href="/', 'src="/', 'action="/'],

@@ -21,7 +21,11 @@ final class ProfileController
         $specialty = trim($_POST['specialty'] ?? '');
         $bio = trim($_POST['bio'] ?? '');
         $currentRole = (string) ($_SESSION['user']['role'] ?? 'learner');
-        $role = $currentRole === 'admin' ? 'admin' : (($_POST['role'] ?? '') === 'instructor' ? 'instructor' : 'learner');
+        if (in_array($currentRole, ['admin','mentor'], true)) {
+            $role = $currentRole;
+        } else {
+            $role = (($_POST['role'] ?? '') === 'instructor') ? 'instructor' : 'learner';
+        }
 
         if ($name === '') {
             $_SESSION['profile_error'] = 'Le nom est obligatoire.';
