@@ -6,7 +6,11 @@ use App\Core\Env;
 
 final class SecureSettings
 {
-    private const SECRET_KEYS=['daily_api_key','smtp_password'];
+    private const SECRET_KEYS=[
+        'daily_api_key','smtp_password',
+        'twilio_account_sid','twilio_auth_token',
+        'meta_whatsapp_token'
+    ];
 
     public function get(string $key,string $default=''): string
     {
