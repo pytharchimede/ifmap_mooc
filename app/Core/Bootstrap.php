@@ -6,7 +6,7 @@ final class Bootstrap
     public static function run(string $root): void
     {
         umask(0002);
-        foreach (['storage','storage/cache','storage/cache/pdf','storage/logs','public/uploads','public/uploads/courses','public/uploads/avatars','public/uploads/cvs','public/uploads/branding','public/uploads/news','public/uploads/chat','storage/documents'] as $relative) {
+        foreach (['storage','storage/cache','storage/cache/pdf','storage/logs','public/uploads','public/uploads/courses','public/uploads/avatars','public/uploads/cvs','public/uploads/branding','public/uploads/news','public/uploads/chat','public/uploads/carousel','storage/documents'] as $relative) {
             $path=$root.'/'.$relative;
             if(!is_dir($path)) @mkdir($path,0775,true);
             if(is_dir($path)) @chmod($path,0775);
