@@ -31,6 +31,7 @@ require __DIR__ . '/routes/web.php';
 require __DIR__ . '/routes/seo_analytics.php';
 require __DIR__ . '/routes/mentorship.php';
 require __DIR__ . '/routes/auth_communications.php';
+require __DIR__ . '/routes/workspace_modules.php';
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
 $basePath = rtrim(str_replace('/index.php', '', $scriptName), '/');
