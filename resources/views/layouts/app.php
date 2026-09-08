@@ -20,8 +20,8 @@
 <a class="<?= $active==='certificates'?'active':'' ?>" href="/academie/certificats"><i data-icon="award"></i>Mes certificats</a>
 <a class="<?= $active==='testimonial'?'active':'' ?>" href="/academie/temoignage"><i data-icon="play"></i>Mon témoignage vidéo</a>
 <p>COMMUNICATION & AIDE</p>
-<a class="<?= $active==='chat'?'active':'' ?>" href="/academie/discussions"><i data-icon="users"></i>Discussions</a>
-<a class="<?= $active==='tickets'?'active':'' ?>" href="/academie/tickets"><i data-icon="mail"></i>Assistance & tickets</a>
+<a class="<?= $active==='chat'?'active':'' ?>" href="/academie/discussions"><i data-icon="users"></i><?= htmlspecialchars(\App\Services\I18n::t('academy.nav.chat','Discussions')) ?></a>
+<a class="<?= $active==='tickets'?'active':'' ?>" href="/academie/tickets"><i data-icon="mail"></i><?= htmlspecialchars(\App\Services\I18n::t('academy.nav.tickets','Assistance & tickets')) ?></a>
 <p>MON COMPTE</p><a href="/academie#profil"><i data-icon="user"></i>Profil et préférences</a><?php if($role!=='mentor'): ?><a href="/devenir-mentor"><i data-icon="award"></i>Devenir mentor</a><?php endif ?>
 </nav><div class="sidebar-help"><span>?</span><div><strong>Besoin d’aide ?</strong><small>Notre équipe vous répond</small></div></div>
 <form method="post" action="/deconnexion"><button class="admin-link logout-link" type="submit"><i data-icon="user"></i>Se déconnecter</button></form>
