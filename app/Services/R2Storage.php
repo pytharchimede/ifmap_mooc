@@ -16,9 +16,22 @@ final class R2Storage
         $allowed=['video/mp4'=>'mp4','video/webm'=>'webm','video/quicktime'=>'mov'];if(!isset($allowed[$contentType]))throw new \InvalidArgumentException('Format vidéo non autorisé. Utilisez MP4, WebM ou MOV.');if($size<1||$size>5*1024*1024*1024)throw new \InvalidArgumentException('La vidéo doit peser moins de 5 Go.');$base=pathinfo($originalName,PATHINFO_FILENAME);$base=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$base)?:'video';$base=strtolower(trim(preg_replace('/[^a-z0-9]+/i','-',$base),'-'))?:'video';$key='courses/'.$courseId.'/'.date('Y/m').'/'.bin2hex(random_bytes(8)).'-'.mb_substr($base,0,80).'.'.$allowed[$contentType];$command=$this->client()->getCommand('PutObject',['Bucket'=>$this->bucket(),'Key'=>$key,'ContentType'=>$contentType]);$request=$this->client()->createPresignedRequest($command,'+15 minutes');return ['upload_url'=>(string)$request->getUri(),'preview_url'=>$this->playbackUrl('r2://'.$key),'key'=>$key,'content'=>'r2://'.$key,'expires_in'=>900];
     }
 
+    public function createTestimonialUpload(int $userId,string $originalName,string $contentType,int $size): array
+    {
+        $contentType=strtolower(trim(explode(';',$contentType,2)[0]));
+        $allowed=['video/mp4'=>'mp4','video/webm'=>'webm','video/quicktime'=>'mov'];
+        if(!isset($allowed[$contentType]))throw new \InvalidArgumentException('Format vidéo non autorisé. Utilisez MP4, WebM ou MOV.');
+        if($size<1||$size>100*1024*1024)throw new \InvalidArgumentException('Le témoignage vidéo doit peser moins de 100 Mo.');
+        $base=pathinfo($originalName,PATHINFO_FILENAME);$base=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$base)?:'temoignage';$base=strtolower(trim(preg_replace('/[^a-z0-9]+/i','-',$base),'-'))?:'temoignage';
+        $key='testimonials/'.$userId.'/'.date('Y/m').'/'.bin2hex(random_bytes(8)).'-'.mb_substr($base,0,60).'.'.$allowed[$contentType];
+        $command=$this->client()->getCommand('PutObject',['Bucket'=>$this->bucket(),'Key'=>$key,'ContentType'=>$contentType]);
+        $request=$this->client()->createPresignedRequest($command,'+15 minutes');
+        return ['upload_url'=>(string)$request->getUri(),'preview_url'=>$this->playbackUrl('r2://'.$key),'key'=>$key,'content'=>'r2://'.$key,'content_type'=>$contentType,'expires_in'=>900];
+    }
+
     public function playbackUrl(string $content): string
     {
-        $key=str_starts_with($content,'r2://')?substr($content,5):$content;$command=$this->client()->getCommand('GetObject',['Bucket'=>$this->bucket(),'Key'=>$key,'ResponseContentType'=>'video/mp4','ResponseContentDisposition'=>'inline']);return (string)$this->client()->createPresignedRequest($command,'+4 hours')->getUri();
+        $key=str_starts_with($content,'r2://')?substr($content,5):$content;$command=$this->client()->getCommand('GetObject',['Bucket'=>$this->bucket(),'Key'=>$key,'ResponseContentDisposition'=>'inline']);return (string)$this->client()->createPresignedRequest($command,'+4 hours')->getUri();
     }
 
     private function client(): S3Client
@@ -28,7 +41,6 @@ final class R2Storage
     private function bucket(): string
     {
         $bucket=trim((string)Env::get('R2_BUCKET','ifmap-mooc-videos'));
-        // Compatibilité avec l'ancien nom utilisé avant la création du bucket R2 réel.
         return $bucket===''||$bucket==='ifmap-course-videos'?'ifmap-mooc-videos':$bucket;
     }
 }

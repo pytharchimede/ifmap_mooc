@@ -7,6 +7,7 @@ use App\Controllers\AcademyController;
 use App\Controllers\ProfileController;
 use App\Controllers\BrandingController;
 use App\Controllers\PublicPagesController;
+use App\Controllers\TestimonialController;
 
 $router->get('/', [SiteController::class, 'home']);
 $router->get('/favicon.ico', function (): void {
@@ -56,6 +57,9 @@ $router->post('/activation/renvoyer', [AuthController::class, 'resendOtp']);
 $router->post('/deconnexion', [AuthController::class, 'logout']);
 $router->get('/academie', [DashboardController::class, 'index']);
 $router->post('/academie/inscrire', [DashboardController::class, 'enroll']);
+$router->get('/academie/temoignage', [TestimonialController::class, 'create']);
+$router->post('/academie/temoignage/upload-url', [TestimonialController::class, 'uploadUrl']);
+$router->post('/academie/temoignage', [TestimonialController::class, 'store']);
 $router->get('/dashboard', function (): void {
     $base = rtrim(str_replace('/index.php', '', str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
     $target = !empty($_SESSION['admin_authenticated']) ? '/admin' : (!empty($_SESSION['user']) ? '/academie' : '/connexion');
@@ -110,6 +114,8 @@ $router->post('/admin/commandes/statut', [AdminController::class, 'updateOrderSt
 $router->get('/admin/documents', [AdminController::class, 'documents']);
 $router->get('/admin/actualites', [AdminController::class, 'news']);
 $router->post('/admin/actualites', [AdminController::class, 'savePost']);
+$router->get('/admin/temoignages', [TestimonialController::class, 'adminIndex']);
+$router->post('/admin/temoignages/moderer', [TestimonialController::class, 'moderate']);
 $router->get('/admin/documents/export-commandes', [AdminController::class, 'exportOrders']);
 $router->get('/admin/documents/export-inscriptions', [AdminController::class, 'exportEnrollments']);
 $router->get('/admin/documents/commande', [AdminController::class, 'orderDocument']);
