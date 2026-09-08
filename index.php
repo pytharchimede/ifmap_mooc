@@ -29,6 +29,7 @@ App\Core\Bootstrap::run(__DIR__);
 $router = new Router();
 require __DIR__ . '/routes/web.php';
 require __DIR__ . '/routes/seo_analytics.php';
+require __DIR__ . '/routes/mentorship.php';
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
 $basePath = rtrim(str_replace('/index.php', '', $scriptName), '/');
@@ -71,9 +72,10 @@ $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/rich-editor.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/news.css"></head>', $html);
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/seo-analytics.css?v=1"></head>', $html);
+$html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/mentorship.css?v=1"></head>', $html);
 /* Must stay last so legacy styles cannot reintroduce old green states. */
 $html = str_replace('</head>', '<link rel="stylesheet" href="/public/assets/css/branding-polish.css?v=20260907-1"></head>', $html);
-$html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script><script src="/public/assets/js/seo-analytics.js?v=1"></script></body>', $html);
+$html = str_replace('</body>', '<script src="/public/assets/js/functional.js"></script><script src="/public/assets/js/seo-analytics.js?v=1"></script><script src="/public/assets/js/mentorship.js?v=1"></script></body>', $html);
 if ($basePath !== '') {
     $html = str_replace(
         ['href="/', 'src="/', 'action="/'],
