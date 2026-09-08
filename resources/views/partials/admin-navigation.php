@@ -15,6 +15,7 @@
     <a class="<?= $active==='admin-visitors'?'active':'' ?>" href="/admin/visiteurs"><i data-icon="users"></i>Visiteurs</a>
     <a class="<?= $active==='admin-seo'?'active':'' ?>" href="/admin/referencement"><i data-icon="search"></i>Référencement</a>
     <p>CONFIGURATION</p>
+    <a class="<?= $active==='admin-auth-notifications'?'active':'' ?>" href="/admin/auth-notifications"><i data-icon="mail"></i>OTP · SMS · WhatsApp</a>
     <a class="<?= $active==='admin-integrations'?'active':'' ?>" href="/admin/integrations"><i data-icon="settings"></i>Live & mailing SMTP</a>
     <a class="<?= $active==='admin-branding'?'active':'' ?>" href="/admin/branding"><i data-icon="palette"></i>Identité visuelle</a>
     <a class="<?= $active==='admin-settings'?'active':'' ?>" href="/admin/branding"><i data-icon="settings"></i>Paramètres</a>
