@@ -1,5 +1,6 @@
 <?php
 use App\Controllers\WorkspaceController;
+use App\Controllers\AdminChatController;
 
 $router->get('/academie/tickets',[WorkspaceController::class,'tickets']);
 $router->post('/academie/tickets',[WorkspaceController::class,'createTicket']);
@@ -18,6 +19,8 @@ $router->post('/admin/ticket',[WorkspaceController::class,'adminTicketAction']);
 $router->get('/admin/crm',[WorkspaceController::class,'crm']);
 $router->post('/admin/crm/contact',[WorkspaceController::class,'saveContact']);
 $router->post('/admin/crm/opportunite',[WorkspaceController::class,'saveOpportunity']);
+
+$router->get('/admin/discussions',[AdminChatController::class,'index']);
 
 $router->get('/admin/traductions',[WorkspaceController::class,'translations']);
 $router->post('/admin/traductions',[WorkspaceController::class,'saveTranslation']);
