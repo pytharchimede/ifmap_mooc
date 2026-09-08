@@ -26,6 +26,6 @@
 </nav><div class="sidebar-help"><span>?</span><div><strong>Besoin d’aide ?</strong><small>Notre équipe vous répond</small></div></div>
 <form method="post" action="/deconnexion"><button class="admin-link logout-link" type="submit"><i data-icon="user"></i>Se déconnecter</button></form>
 <?php if($role==='admin'): ?><a class="admin-link" href="/admin"><i data-icon="shield"></i>Administration</a><?php endif ?></aside>
-<main class="main"><header class="topbar"><button class="icon-btn mobile-menu" data-menu>☰</button><label class="search"><i data-icon="search"></i><input placeholder="Rechercher une formation ou un mentor..."><kbd>⌘ K</kbd></label><div class="top-actions"><button class="icon-btn dot"><i data-icon="bell"></i></button><?php $accountContext='app';require __DIR__.'/../partials/account-dropdown.php'; ?></div></header>
+<main class="main"><header class="topbar"><button class="icon-btn mobile-menu" data-menu>☰</button><label class="search"><i data-icon="search"></i><input placeholder="Rechercher une formation ou un mentor..."><kbd>⌘ K</kbd></label><div class="top-actions"><?php require __DIR__.'/../partials/language-switcher.php'; ?><button class="icon-btn dot"><i data-icon="bell"></i></button><?php $accountContext='app';require __DIR__.'/../partials/account-dropdown.php'; ?></div></header>
 <div class="page"><?= $content ?></div></main></div>
 <script src="/public/assets/js/app.js"></script><script src="/public/assets/js/workspace-modules.js?v=1"></script></body></html>
