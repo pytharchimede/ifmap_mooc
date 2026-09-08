@@ -47,7 +47,7 @@ $open=fn(string $group): string => in_array($active,$groups[$group]??[],true)?' 
     <details class="admin-nav-group"<?= $open('communication') ?>>
         <summary><span class="nav-group-icon">04</span><span><strong>Communication</strong><small>Messages, langues & notifications</small></span><b>⌄</b></summary>
         <div class="admin-nav-links">
-            <a class="<?= $active==='admin-chat'?'active':'' ?>" href="/academie/discussions"><i data-icon="users"></i>Discussion instantanée</a>
+            <a class="<?= $active==='admin-chat'?'active':'' ?>" href="/admin/discussions"><i data-icon="users"></i>Discussion instantanée</a>
             <a class="<?= $active==='admin-auth-notifications'?'active':'' ?>" href="/admin/auth-notifications"><i data-icon="mail"></i>OTP · SMS · WhatsApp</a>
             <a class="<?= $active==='admin-i18n'?'active':'' ?>" href="/admin/traductions"><i data-icon="compass"></i>Traductions & langues</a>
         </div>
