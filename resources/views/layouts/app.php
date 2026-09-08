@@ -5,7 +5,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/assets/css/app.css">
-<style>:root{--primary:<?= htmlspecialchars($brand['primary']) ?>;--accent:<?= htmlspecialchars($brand['accent']) ?>}</style></head>
+<link rel="stylesheet" href="/public/assets/css/testimonials.css?v=1">
+<style>:root{--primary:<?= htmlspecialchars($brand['primary']) ?>;--accent:<?= htmlspecialchars($brand['accent']) ?>;--site-primary:<?= htmlspecialchars($brand['primary']) ?>;--site-accent:<?= htmlspecialchars($brand['accent']) ?>}</style></head>
 <body><div class="app-shell">
 <aside class="sidebar" id="sidebar"><div class="sidebar-head"><?php require __DIR__.'/../partials/logo.php'; ?><button class="icon-btn close-mobile" data-menu>×</button></div>
 <nav class="main-nav">
@@ -14,6 +15,7 @@
 <a class="<?= $active==='courses'?'active':'' ?>" href="/cours"><i data-icon="book"></i>Mes formations<?php if(!empty($_SESSION['my_course_count'])): ?><b><?= (int)$_SESSION['my_course_count'] ?></b><?php endif ?></a>
 <a class="<?= $active==='catalog'?'active':'' ?>" href="/catalogue"><i data-icon="compass"></i>Catalogue</a>
 <a class="<?= $active==='certificates'?'active':'' ?>" href="/academie/certificats"><i data-icon="award"></i>Mes certificats</a>
+<a class="<?= $active==='testimonial'?'active':'' ?>" href="/academie/temoignage"><i data-icon="play"></i>Mon témoignage vidéo</a>
 <p>MON COMPTE</p><a href="/academie#profil"><i data-icon="user"></i>Profil et préférences</a>
 </nav><div class="sidebar-help"><span>?</span><div><strong>Besoin d’aide ?</strong><small>Notre équipe vous répond</small></div></div>
 <form method="post" action="/deconnexion"><button class="admin-link logout-link" type="submit"><i data-icon="user"></i>Se déconnecter</button></form>
