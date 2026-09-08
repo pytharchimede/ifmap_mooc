@@ -21,6 +21,8 @@ $router->post('/admin/crm/contact',[WorkspaceController::class,'saveContact']);
 $router->post('/admin/crm/opportunite',[WorkspaceController::class,'saveOpportunity']);
 
 $router->get('/admin/discussions',[AdminChatController::class,'index']);
+$router->get('/admin/discussion',[AdminChatController::class,'conversation']);
+$router->post('/admin/discussion/envoyer',[AdminChatController::class,'send']);
 
 $router->get('/admin/traductions',[WorkspaceController::class,'translations']);
 $router->post('/admin/traductions',[WorkspaceController::class,'saveTranslation']);
