@@ -1,6 +1,7 @@
 <?php
 use App\Controllers\WorkspaceController;
 use App\Controllers\AdminChatController;
+use App\Controllers\AdminCarouselController;
 
 $router->get('/academie/tickets',[WorkspaceController::class,'tickets']);
 $router->post('/academie/tickets',[WorkspaceController::class,'createTicket']);
@@ -23,6 +24,11 @@ $router->post('/admin/crm/opportunite',[WorkspaceController::class,'saveOpportun
 $router->get('/admin/discussions',[AdminChatController::class,'index']);
 $router->get('/admin/discussion',[AdminChatController::class,'conversation']);
 $router->post('/admin/discussion/envoyer',[AdminChatController::class,'send']);
+
+$router->get('/admin/carrousel',[AdminCarouselController::class,'index']);
+$router->post('/admin/carrousel/enregistrer',[AdminCarouselController::class,'save']);
+$router->post('/admin/carrousel/supprimer',[AdminCarouselController::class,'delete']);
+$router->post('/admin/carrousel/parametres',[AdminCarouselController::class,'settings']);
 
 $router->get('/admin/traductions',[WorkspaceController::class,'translations']);
 $router->post('/admin/traductions',[WorkspaceController::class,'saveTranslation']);
