@@ -4,6 +4,7 @@
     <a class="<?= $active==='admin-courses'?'active':'' ?>" href="/admin/cours"><i data-icon="book"></i>Formations</a>
     <a class="<?= $active==='admin-enrollments'?'active':'' ?>" href="/admin/inscriptions"><i data-icon="users"></i>Inscriptions aux cours</a>
     <a class="<?= $active==='admin-users'?'active':'' ?>" href="/admin/utilisateurs"><i data-icon="users"></i>Utilisateurs</a>
+    <a class="<?= $active==='admin-mentorship'?'active':'' ?>" href="/admin/mentorat"><i data-icon="users"></i>Mentorat & coaching</a>
     <a class="<?= $active==='admin-testimonials'?'active':'' ?>" href="/admin/temoignages"><i data-icon="play"></i>Témoignages vidéo</a>
     <a class="<?= $active==='admin-orders'?'active':'' ?>" href="/admin/commandes"><i data-icon="chart"></i>Finances & commandes</a>
     <a class="<?= $active==='admin-documents'?'active':'' ?>" href="/admin/documents"><i data-icon="award"></i>Documents & exports</a>
@@ -14,6 +15,7 @@
     <a class="<?= $active==='admin-visitors'?'active':'' ?>" href="/admin/visiteurs"><i data-icon="users"></i>Visiteurs</a>
     <a class="<?= $active==='admin-seo'?'active':'' ?>" href="/admin/referencement"><i data-icon="search"></i>Référencement</a>
     <p>CONFIGURATION</p>
+    <a class="<?= $active==='admin-integrations'?'active':'' ?>" href="/admin/integrations"><i data-icon="settings"></i>Live & mailing SMTP</a>
     <a class="<?= $active==='admin-branding'?'active':'' ?>" href="/admin/branding"><i data-icon="palette"></i>Identité visuelle</a>
     <a class="<?= $active==='admin-settings'?'active':'' ?>" href="/admin/branding"><i data-icon="settings"></i>Paramètres</a>
 </nav>
