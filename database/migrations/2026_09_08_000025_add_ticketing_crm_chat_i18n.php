@@ -118,4 +118,21 @@ return function(PDO $db): void {
         ['ticketing_enabled','1','modules'],['crm_enabled','1','modules'],['chat_enabled','1','modules'],['i18n_enabled','1','modules'],
         ['default_locale','fr','i18n'],['supported_locales','fr,en','i18n'],['auto_detect_locale','0','i18n']
     ] as $s){$st=$db->prepare("INSERT IGNORE INTO settings(`key`,`value`,`group`) VALUES(?,?,?)");$st->execute($s);}
+
+    $translations=[
+        ['admin.nav.dashboard','fr','Vue d’ensemble'],['admin.nav.dashboard','en','Overview'],
+        ['admin.nav.pilotage','fr','Pilotage'],['admin.nav.pilotage','en','Management'],
+        ['admin.nav.operations','fr','Opérations'],['admin.nav.operations','en','Operations'],
+        ['admin.nav.content','fr','Contenus & visibilité'],['admin.nav.content','en','Content & visibility'],
+        ['admin.nav.communication','fr','Communication'],['admin.nav.communication','en','Communication'],
+        ['admin.nav.configuration','fr','Configuration'],['admin.nav.configuration','en','Configuration'],
+        ['admin.nav.ticketing','fr','Ticketing & assistance'],['admin.nav.ticketing','en','Ticketing & support'],
+        ['admin.nav.crm','fr','CRM & opportunités'],['admin.nav.crm','en','CRM & opportunities'],
+        ['admin.nav.chat','fr','Discussion instantanée'],['admin.nav.chat','en','Instant messaging'],
+        ['admin.nav.i18n','fr','Traductions & langues'],['admin.nav.i18n','en','Translations & languages'],
+        ['academy.nav.chat','fr','Discussions'],['academy.nav.chat','en','Messages'],
+        ['academy.nav.tickets','fr','Assistance & tickets'],['academy.nav.tickets','en','Support & tickets']
+    ];
+    $st=$db->prepare("INSERT IGNORE INTO translation_strings(translation_key,locale,value,scope) VALUES(?,?,?,'navigation')");
+    foreach($translations as $row)$st->execute($row);
 };
