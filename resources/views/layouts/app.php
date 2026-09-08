@@ -6,6 +6,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/assets/css/app.css">
 <link rel="stylesheet" href="/public/assets/css/testimonials.css?v=1">
+<link rel="stylesheet" href="/public/assets/css/workspace-modules.css?v=1">
 <style>:root{--primary:<?= htmlspecialchars($brand['primary']) ?>;--accent:<?= htmlspecialchars($brand['accent']) ?>;--site-primary:<?= htmlspecialchars($brand['primary']) ?>;--site-accent:<?= htmlspecialchars($brand['accent']) ?>}</style></head>
 <body><div class="app-shell">
 <aside class="sidebar" id="sidebar"><div class="sidebar-head"><?php require __DIR__.'/../partials/logo.php'; ?><button class="icon-btn close-mobile" data-menu>×</button></div>
@@ -18,10 +19,13 @@
 <a class="<?= $active==='mentorship'?'active':'' ?>" href="/academie/mentorat"><i data-icon="users"></i>Mentorat & coaching</a>
 <a class="<?= $active==='certificates'?'active':'' ?>" href="/academie/certificats"><i data-icon="award"></i>Mes certificats</a>
 <a class="<?= $active==='testimonial'?'active':'' ?>" href="/academie/temoignage"><i data-icon="play"></i>Mon témoignage vidéo</a>
+<p>COMMUNICATION & AIDE</p>
+<a class="<?= $active==='chat'?'active':'' ?>" href="/academie/discussions"><i data-icon="users"></i><?= htmlspecialchars(\App\Services\I18n::t('academy.nav.chat','Discussions')) ?></a>
+<a class="<?= $active==='tickets'?'active':'' ?>" href="/academie/tickets"><i data-icon="mail"></i><?= htmlspecialchars(\App\Services\I18n::t('academy.nav.tickets','Assistance & tickets')) ?></a>
 <p>MON COMPTE</p><a href="/academie#profil"><i data-icon="user"></i>Profil et préférences</a><?php if($role!=='mentor'): ?><a href="/devenir-mentor"><i data-icon="award"></i>Devenir mentor</a><?php endif ?>
 </nav><div class="sidebar-help"><span>?</span><div><strong>Besoin d’aide ?</strong><small>Notre équipe vous répond</small></div></div>
 <form method="post" action="/deconnexion"><button class="admin-link logout-link" type="submit"><i data-icon="user"></i>Se déconnecter</button></form>
 <?php if($role==='admin'): ?><a class="admin-link" href="/admin"><i data-icon="shield"></i>Administration</a><?php endif ?></aside>
-<main class="main"><header class="topbar"><button class="icon-btn mobile-menu" data-menu>☰</button><label class="search"><i data-icon="search"></i><input placeholder="Rechercher une formation ou un mentor..."><kbd>⌘ K</kbd></label><div class="top-actions"><button class="icon-btn dot"><i data-icon="bell"></i></button><?php $accountContext='app';require __DIR__.'/../partials/account-dropdown.php'; ?></div></header>
+<main class="main"><header class="topbar"><button class="icon-btn mobile-menu" data-menu>☰</button><label class="search"><i data-icon="search"></i><input placeholder="Rechercher une formation ou un mentor..."><kbd>⌘ K</kbd></label><div class="top-actions"><?php require __DIR__.'/../partials/language-switcher.php'; ?><button class="icon-btn dot"><i data-icon="bell"></i></button><?php $accountContext='app';require __DIR__.'/../partials/account-dropdown.php'; ?></div></header>
 <div class="page"><?= $content ?></div></main></div>
-<script src="/public/assets/js/app.js"></script></body></html>
+<script src="/public/assets/js/app.js"></script><script src="/public/assets/js/workspace-modules.js?v=1"></script></body></html>
