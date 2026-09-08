@@ -14,7 +14,9 @@ final class AnalyticsRepository
         [$where,$args]=$this->filters($f,'s');
         $q="SELECT COUNT(DISTINCT s.visitor_uuid) unique_visitors,COUNT(*) sessions,SUM(s.is_returning=1) returning_sessions,COUNT(DISTINCT CASE WHEN s.is_returning=1 THEN s.visitor_uuid END) returning_visitors FROM visitor_sessions s WHERE $where";
         $st=$this->db->prepare($q);$st->execute($args);$base=$st->fetch()?:[];
-        [$pwhere,$pargs]=$this->pageFilters($f,'p');$st=$this->db->prepare("SELECT COUNT(*) FROM visitor_pageviews p WHERE $pwhere");$st->execute($pargs);$base['pageviews']=(int)$st->fetchColumn();
+        [$pwhere,$pargs]=$this->filters($f,'s');
+        $st=$this->db->prepare("SELECT COUNT(*) FROM visitor_pageviews p JOIN visitor_sessions s ON s.session_uuid=p.session_uuid WHERE $pwhere AND p.created_at BETWEEN ? AND ?");
+        $from=($f['from']??date('Y-m-d',strtotime('-29 days'))).' 00:00:00';$to=($f['to']??date('Y-m-d')).' 23:59:59';$st->execute([...$pargs,$from,$to]);$base['pageviews']=(int)$st->fetchColumn();
         $base['unique_visitors']=(int)($base['unique_visitors']??0);$base['sessions']=(int)($base['sessions']??0);$base['returning_sessions']=(int)($base['returning_sessions']??0);$base['returning_visitors']=(int)($base['returning_visitors']??0);
         $base['pages_per_session']=$base['sessions']?round($base['pageviews']/$base['sessions'],2):0;
         return $base;
@@ -29,7 +31,8 @@ final class AnalyticsRepository
 
     public function topPages(array $f): array
     {
-        [$where,$args]=$this->pageFilters($f,'p');$st=$this->db->prepare("SELECT p.path,COUNT(*) views,COUNT(DISTINCT p.visitor_uuid) visitors FROM visitor_pageviews p WHERE $where GROUP BY p.path ORDER BY views DESC LIMIT 12");$st->execute($args);return $st->fetchAll();
+        [$where,$args]=$this->filters($f,'s');$from=($f['from']??date('Y-m-d',strtotime('-29 days'))).' 00:00:00';$to=($f['to']??date('Y-m-d')).' 23:59:59';
+        $st=$this->db->prepare("SELECT p.path,COUNT(*) views,COUNT(DISTINCT p.visitor_uuid) visitors FROM visitor_pageviews p JOIN visitor_sessions s ON s.session_uuid=p.session_uuid WHERE $where AND p.created_at BETWEEN ? AND ? GROUP BY p.path ORDER BY views DESC LIMIT 12");$st->execute([...$args,$from,$to]);return $st->fetchAll();
     }
     public function sources(array $f): array
     {
@@ -65,14 +68,6 @@ final class AnalyticsRepository
         if(!empty($f['device'])){$w[]="$a.device_type=?";$args[]=$f['device'];}
         if(($f['returning']??'')==='1')$w[]="$a.is_returning=1";elseif(($f['returning']??'')==='0')$w[]="$a.is_returning=0";
         if(!empty($f['q'])){$w[]="($a.ip_address LIKE ? OR $a.city LIKE ? OR $a.country_name LIKE ? OR $a.browser LIKE ? OR $a.os LIKE ? OR $a.landing_path LIKE ? OR $a.visitor_uuid LIKE ?)";$needle='%'.$f['q'].'%';for($i=0;$i<7;$i++)$args[]=$needle;}
-        return [implode(' AND ',$w),$args];
-    }
-    private function pageFilters(array $f,string $a): array
-    {
-        $w=['1=1'];$args=[];
-        if(!empty($f['from'])){$w[]="$a.created_at>=?";$args[]=$f['from'].' 00:00:00';}
-        if(!empty($f['to'])){$w[]="$a.created_at<=?";$args[]=$f['to'].' 23:59:59';}
-        if(!empty($f['q'])){$w[]="($a.path LIKE ? OR $a.referrer LIKE ? OR $a.visitor_uuid LIKE ?)";$needle='%'.$f['q'].'%';for($i=0;$i<3;$i++)$args[]=$needle;}
         return [implode(' AND ',$w),$args];
     }
 }
