@@ -1,0 +1,9 @@
+<section class="module-hero"><div><span class="module-kicker">Support & qualité de service</span><h1>Ticketing IFMAP</h1><p>Centralisez les demandes des apprenants, suivez les urgences et traitez chaque échange sans perdre le contexte.</p></div></section>
+<div class="module-grid">
+<article class="module-stat"><small>Ouverts</small><strong><?= (int)$metrics['open'] ?></strong></article>
+<article class="module-stat"><small>En traitement</small><strong><?= (int)$metrics['progress'] ?></strong></article>
+<article class="module-stat"><small>Urgents</small><strong><?= (int)$metrics['urgent'] ?></strong></article>
+<article class="module-stat"><small>Résolus</small><strong><?= (int)$metrics['resolved'] ?></strong></article>
+</div>
+<section class="module-panel"><div class="section-head"><div><h2>File de traitement</h2><p>Les demandes prioritaires apparaissent en premier.</p></div></div>
+<?php if(!$tickets): ?><div class="module-empty">Aucun ticket pour le moment.</div><?php else: ?><table class="module-table"><thead><tr><th>Référence</th><th>Utilisateur</th><th>Objet</th><th>Priorité</th><th>Statut</th><th>Messages</th><th></th></tr></thead><tbody><?php foreach($tickets as $t): ?><tr><td><strong><?= htmlspecialchars($t['reference']) ?></strong></td><td><?= htmlspecialchars($t['user_name']??'Compte supprimé') ?><br><small><?= htmlspecialchars($t['user_email']??'') ?></small></td><td><?= htmlspecialchars($t['subject']) ?><br><small><?= htmlspecialchars($t['category']??'') ?></small></td><td><span class="module-status <?= $t['priority']==='urgent'?'urgent':'' ?>"><?= htmlspecialchars($t['priority']) ?></span></td><td><span class="module-status <?= $t['status']==='resolved'?'resolved':'' ?>"><?= htmlspecialchars($t['status']) ?></span></td><td><?= (int)$t['message_count'] ?></td><td><a class="btn secondary" href="/admin/ticket?id=<?= (int)$t['id'] ?>">Ouvrir →</a></td></tr><?php endforeach ?></tbody></table><?php endif ?></section>
