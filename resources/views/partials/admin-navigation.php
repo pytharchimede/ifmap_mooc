@@ -4,7 +4,7 @@ $t=fn(string $key,string $fallback): string => \App\Services\I18n::t($key,$fallb
 $groups=[
     'pilotage'=>['admin-dashboard','admin-courses','admin-enrollments','admin-users','admin-mentorship'],
     'operations'=>['admin-ticketing','admin-crm','admin-orders','admin-documents','admin-products','admin-coupons'],
-    'contenus'=>['admin-testimonials','admin-news','admin-visitors','admin-seo'],
+    'contenus'=>['admin-carousel','admin-testimonials','admin-news','admin-visitors','admin-seo'],
     'communication'=>['admin-chat','admin-auth-notifications','admin-i18n'],
     'configuration'=>['admin-integrations','admin-branding','admin-settings'],
 ];
@@ -38,6 +38,7 @@ $open=fn(string $group): string => in_array($active,$groups[$group]??[],true)?' 
     <details class="admin-nav-group"<?= $open('contenus') ?>>
         <summary><span class="nav-group-icon">03</span><span><strong><?= htmlspecialchars($t('admin.nav.content','Contenus & visibilité')) ?></strong><small>Éditorial, SEO & audience</small></span><b>⌄</b></summary>
         <div class="admin-nav-links">
+            <a class="<?= $active==='admin-carousel'?'active':'' ?>" href="/admin/carrousel"><i data-icon="image"></i>Carrousel accueil</a>
             <a class="<?= $active==='admin-testimonials'?'active':'' ?>" href="/admin/temoignages"><i data-icon="play"></i>Témoignages vidéo</a>
             <a class="<?= $active==='admin-news'?'active':'' ?>" href="/admin/actualites"><i data-icon="mail"></i>Actualités & blog</a>
             <a class="<?= $active==='admin-visitors'?'active':'' ?>" href="/admin/visiteurs"><i data-icon="users"></i>Visiteurs</a>
