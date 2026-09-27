@@ -66,7 +66,7 @@ final class SiteController
         $prerequisites = $db->query("SELECT cp.*,required.title required_title FROM course_prerequisites cp LEFT JOIN courses required ON required.id=cp.prerequisite_course_id WHERE cp.course_id=" . (int) $course['id'])->fetchAll();
         $modules = $db->query('SELECT * FROM modules WHERE course_id=' . (int) $course['id'] . ' ORDER BY position,id')->fetchAll();
         foreach ($modules as &$module) {
-            $lessonStmt = $db->prepare('SELECT title,type,duration,content FROM lessons WHERE module_id=? ORDER BY position,id');
+            $lessonStmt = $db->prepare('SELECT id,title,type,duration,content,is_preview FROM lessons WHERE module_id=? ORDER BY position,id');
             $lessonStmt->execute([(int) $module['id']]);
             $module['lessons'] = $lessonStmt->fetchAll();
         }

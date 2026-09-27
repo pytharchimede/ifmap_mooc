@@ -1,14 +1,3 @@
-<?php
-/** @var array{name:string,primary:string,accent:string,logo:?string,favicon:?string,signature:?string} $brand */
-$brand = array_merge([
-    'name' => 'IFMAP Learning',
-    'primary' => '#5547e8',
-    'accent' => '#f59e0b',
-    'logo' => null,
-    'favicon' => null,
-    'signature' => null,
-], $brand ?? []);
-?>
 <section class="admin-welcome">
     <div>
         <p class="eyebrow">IDENTITÉ GLOBALE</p>
@@ -124,8 +113,8 @@ $brand = array_merge([
         <div
             class="brand-document-preview"
             style="
-                --preview-primary: <?= htmlspecialchars($brand['primary']) ?>;
-                --preview-accent: <?= htmlspecialchars($brand['accent']) ?>;
+                --preview-primary: <?= htmlspecialchars($brand[ &quot;primary&quot;]) ?>;
+                --preview-accent: <?= htmlspecialchars($brand[ &quot;accent&quot;]) ?>;
             "
         >
             <div>
@@ -241,7 +230,7 @@ $brand = array_merge([
                 preview = zone.querySelector("[data-preview]");
             const show = (file) => {
                 if (!file) return;
-                const r = new window.FileReader();
+                const r = new FileReader();
                 r.onload = () => {
                     preview.innerHTML = '<img alt="Aperçu">';
                     preview.querySelector("img").src = r.result;
@@ -263,7 +252,7 @@ $brand = array_merge([
             zone.addEventListener("drop", (e) => {
                 const f = e.dataTransfer.files?.[0];
                 if (!f) return;
-                const dt = new window.DataTransfer();
+                const dt = new DataTransfer();
                 dt.items.add(f);
                 input.files = dt.files;
                 show(f);
