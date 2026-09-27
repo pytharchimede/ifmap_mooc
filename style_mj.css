@@ -1,0 +1,40 @@
+.container {
+  margin: 30px;
+  padding: 30px;
+}
+
+.menu {
+  background-color: #e8c90c;
+  height: 20px;
+}
+
+.hero {
+  background-color: #e8c90c;
+  height: 100px;
+  margin-top: 15px;
+  margin-bottom: 35px;
+}
+
+.left-aside {
+  background-color: #e8c90c;
+  border: 5px solid #ffffff;
+  height: 450px;
+}
+
+.right-aside {
+  background-color: #e8c90c;
+  border: 5px solid #ffffff;
+  height: 450px;
+  padding: 10px;
+}
+
+.card {
+  background-color: #e8c90c;
+  border: 5px solid #ffffff;
+  height: 75px;
+  margin: 15px;
+}
+
+div {
+  border-radius: 35px;
+}
